@@ -4,7 +4,7 @@ const express = require('express')
 const cookieParser = require('cookie-parser')
 const path = require('path')
 const jwt = require('jsonwebtoken')
-const routes = require('routes.js')
+const routes = require('./routes.js')
 
 const app = express()
 
