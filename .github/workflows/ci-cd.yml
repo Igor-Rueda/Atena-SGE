@@ -155,6 +155,16 @@ jobs:
           echo ""
           echo "Pagamentos OK -- webhook, checkout protegido e renovação de token funcionando."
 
+      # Regressão (Python): testes unitários do modelo + chamadas HTTP de verdade, feitas de
+      # dentro do container (o serviço não publica porta). Sem chave interna = 403; entrada
+      # inválida = 400; previsão válida devolve um número.
+      - name: Testar regressão (modelo e API)
+        run: |
+          docker compose -f docker-compose.yml -f docker-compose.ci.yml \
+            exec -T regressao python -m unittest discover -s tests -v
+          docker compose -f docker-compose.yml -f docker-compose.ci.yml \
+            exec -T regressao python tests/smoke_http.py
+
       - name: Logs dos containers (em caso de falha)
         if: failure()
         run: docker compose -f docker-compose.yml -f docker-compose.ci.yml logs
@@ -234,6 +244,15 @@ jobs:
             igorrueda/atenas-pagamentos:latest
             igorrueda/atenas-pagamentos:sha-${{ steps.vars.outputs.sha_short }}
 
+      - name: Build & push -- regressao
+        uses: docker/build-push-action@v6
+        with:
+          context: ./regressao
+          push: true
+          tags: |
+            igorrueda/atenas-regressao:latest
+            igorrueda/atenas-regressao:sha-${{ steps.vars.outputs.sha_short }}
+
       # DEPLOY: não automatizado nesta versão. Ver README, seção "Deploy",
       # para o passo manual que fecha o restante do fluxo.
       - name: Lembrete de deploy manual
@@ -244,6 +263,7 @@ jobs:
           echo "  igorrueda/atenas-log-service:sha-${{ steps.vars.outputs.sha_short }}"
           echo "  igorrueda/atenas-profile-service:sha-${{ steps.vars.outputs.sha_short }}"
           echo "  igorrueda/atenas-pagamentos:sha-${{ steps.vars.outputs.sha_short }}"
+          echo "  igorrueda/atenas-regressao:sha-${{ steps.vars.outputs.sha_short }}"
           echo ""
           echo "Deploy automático pendente (ver README) -- atualize a stack"
           echo "manualmente no Portainer: 'Re-pull image and redeploy'."
