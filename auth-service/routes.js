@@ -136,7 +136,7 @@ router.post('/esqueci-senha', limitadorSensivel, async (req, res) => {
     const link = `${process.env.APP_URL}/redefinir-senha.html?token=${token}`
 
     await transportador.sendMail({
-      from: '"Atenas SGE" <no-reply@catalogo.com>',
+      from: process.env.MAIL_FROM || '"Atenas SGE" <no-reply@catalogo.com>',
       to: usuario.email,
       subject: 'Redefinição de senha',
       html: `<p>Clique no link abaixo para redefinir sua senha. Ele expira em 30 minutos:</p>
