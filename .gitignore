@@ -5,3 +5,4 @@ node_modules
 garage.toml
 Typst
 atenas-sge-atualizacao
+venv
