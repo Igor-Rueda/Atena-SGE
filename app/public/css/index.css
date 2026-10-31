@@ -1,15 +1,23 @@
 :root {
-  /* identidade visual do Atenas SGE: troque as cores aqui, num lugar só */
-  --cor-primaria: #8fbc8f;
-  --cor-primaria-escura: #7cae7c;
-  --cor-superficie: #f4f7f3;
-  --cor-borda-suave: #e3ece2;
-  --cor-borda-suave-2: #dfe8de;
-  --cor-borda: #cdd9cc;
-  --cor-texto: #2b2f2b;
-  --cor-texto-suave: #6b7a6b;
-  --cor-erro: #c0524a;
-  --cor-sobre-primaria: #1f2e1f;
+  /* Paleta do Atenas SGE, tirada do logo: bege claro/pastel de base e bronze como destaque.
+     Troque as cores aqui, num lugar só. */
+  --cor-fundo: #f8f2e9;            /* fundo da página: bege bem claro */
+  --cor-superficie: #f2e9db;       /* cartões e painéis: bege pastel */
+  --cor-campo: #fffcf7;            /* campos, listas e modais: quase branco quente */
+
+  --cor-primaria: #8f6748;         /* bronze do elmo, um tom mais fundo para o texto claro ler bem */
+  --cor-primaria-escura: #744d34;  /* hover e links */
+  --cor-sobre-primaria: #fffaf3;   /* texto sobre o bronze */
+  --cor-anel-foco: rgba(143, 103, 72, 0.28);
+
+  --cor-borda: #dcc7b1;
+  --cor-borda-suave: #eadcc8;
+  --cor-borda-suave-2: #e8d8c3;
+
+  --cor-texto: #3f2a1d;            /* marrom escuro da crista do logo */
+  --cor-texto-medio: #5a4332;
+  --cor-texto-suave: #7a5842;
+  --cor-erro: #a63d34;
 }
 
 * {
@@ -30,7 +38,7 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #ffffff;
+  background: var(--cor-fundo);
   font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
   color: var(--cor-texto);
 }
@@ -44,7 +52,7 @@ body {
   background: var(--cor-superficie);
   border: 1px solid var(--cor-borda-suave-2);
   border-radius: 10px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.06);
+  box-shadow: 0 4px 20px rgba(63, 35, 21, 0.08);
 }
 
 h1 {
@@ -69,7 +77,7 @@ input {
   padding: 10px 12px;
   border-radius: 6px;
   border: 1px solid var(--cor-borda);
-  background: #ffffff;
+  background: var(--cor-campo);
   color: var(--cor-texto);
   font-size: 0.95rem;
 }
@@ -77,7 +85,7 @@ input {
 input:focus {
   outline: none;
   border-color: var(--cor-primaria);
-  box-shadow: 0 0 0 3px rgba(143, 188, 143, 0.25);
+  box-shadow: 0 0 0 3px var(--cor-anel-foco);
 }
 
 button {
@@ -111,7 +119,7 @@ button:hover {
 }
 
 .link-secundario a {
-  color: #5a9367;
+  color: var(--cor-primaria-escura);
   text-decoration: none;
 }
 
@@ -125,7 +133,7 @@ button:hover {
 }
 
 .link-esqueci-senha a {
-  color: #8a978a;
+  color: var(--cor-texto-suave);
 }
 
 /* ---------- tela do app ---------- */
@@ -209,7 +217,7 @@ button:hover {
 .modal-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.5);
+  background: rgba(63, 35, 21, 0.5);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -221,13 +229,13 @@ button:hover {
 }
 
 .modal-caixa {
-  background: #ffffff;
+  background: var(--cor-campo);
   border-radius: 10px;
   padding: 28px;
   max-width: 360px;
   width: 90%;
   text-align: center;
-  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 10px 40px rgba(63, 35, 21, 0.22);
 }
 
 .modal-caixa h2 {
@@ -269,7 +277,7 @@ button:hover {
 
 .card-plano.plano-atual {
   border-color: var(--cor-primaria);
-  box-shadow: 0 0 0 2px rgba(143, 188, 143, 0.3);
+  box-shadow: 0 0 0 2px var(--cor-anel-foco);
 }
 
 .card-plano h3 {
@@ -281,7 +289,7 @@ button:hover {
   margin: 0;
   padding-left: 18px;
   font-size: 0.85rem;
-  color: #3f4a3f;
+  color: var(--cor-texto-medio);
 }
 
 .grade-planos {
@@ -383,7 +391,7 @@ button:hover {
   height: 30px;
   border-radius: 50%;
   background: var(--cor-texto);
-  color: #ffffff;
+  color: var(--cor-campo);
   border: 2px solid var(--cor-superficie);
   display: flex;
   align-items: center;
@@ -392,7 +400,7 @@ button:hover {
 }
 
 .botao-avatar:hover {
-  background: #454a45;
+  background: var(--cor-texto-medio);
 }
 
 .linha-nome {
@@ -424,12 +432,12 @@ button:hover {
 
 .botao-editar-bio:hover {
   border-color: var(--cor-primaria);
-  background: #ffffff;
+  background: var(--cor-campo);
 }
 
 .bio-texto {
   max-width: 60ch;
-  color: #555f55;
+  color: var(--cor-texto-medio);
   line-height: 1.5;
 }
 
@@ -452,7 +460,7 @@ button:hover {
   padding: 10px 12px;
   border-radius: 6px;
   border: 1px solid var(--cor-borda);
-  background: #ffffff;
+  background: var(--cor-campo);
   color: var(--cor-texto);
   font-size: 0.9rem;
   font-family: inherit;
@@ -461,7 +469,7 @@ button:hover {
 .form-bio textarea:focus {
   outline: none;
   border-color: var(--cor-primaria);
-  box-shadow: 0 0 0 3px rgba(143, 188, 143, 0.25);
+  box-shadow: 0 0 0 3px var(--cor-anel-foco);
 }
 
 .form-bio-rodape {
@@ -600,7 +608,7 @@ button:hover {
   justify-content: space-between;
   gap: 10px;
   flex-wrap: wrap;
-  background: #ffffff;
+  background: var(--cor-campo);
   border: 1px solid var(--cor-borda-suave);
   border-radius: 6px;
   padding: 8px 12px;
@@ -620,7 +628,7 @@ select {
   padding: 8px 10px;
   border-radius: 6px;
   border: 1px solid var(--cor-borda);
-  background: #ffffff;
+  background: var(--cor-campo);
   color: var(--cor-texto);
   font-size: 0.9rem;
 }
