@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Projetos — Atenas SGE</title>
+  <link rel="stylesheet" href="css/index.css">
+</head>
+<body class="pagina-app">
+  <header class="topo">
+    <h1>Projetos e demandas</h1>
+    <div class="area-usuario">
+      <span id="badge-role" class="badge-role" hidden></span>
+      <a href="previsao.html" class="botao-secundario">Previsão</a>
+      <a href="perfil.html" class="botao-secundario">Perfil</a>
+      <a href="planos.html" class="botao-secundario">Planos</a>
+      <button id="btn-logout" class="botao-secundario">Sair</button>
+    </div>
+  </header>
+
+  <main>
+    <p id="mensagem-status" class="status" hidden></p>
+
+    <section class="painel">
+      <h2>Novo projeto</h2>
+      <form id="form-projeto" class="form-linha">
+        <div><label for="projeto-nome">Nome</label><input type="text" id="projeto-nome" required maxlength="150"></div>
+        <div><label for="projeto-descricao">Descrição</label><input type="text" id="projeto-descricao"></div>
+        <div><label for="projeto-prazo">Prazo (dias)</label><input type="number" id="projeto-prazo" min="1" step="1"></div>
+        <button type="submit">Criar projeto</button>
+      </form>
+    </section>
+
+    <section class="painel">
+      <h2>Meus projetos</h2>
+      <ul id="lista-projetos" class="lista-simples"></ul>
+    </section>
+
+    <section id="detalhe" class="painel" hidden>
+      <div class="linha-titulo"><h2 id="detalhe-titulo"></h2><span id="detalhe-status" class="etiqueta"></span></div>
+      <p id="detalhe-descricao" class="texto-suave"></p>
+
+      <h3>Itens</h3>
+      <form id="form-item" class="form-linha" hidden>
+        <div><label for="item-rg">RG</label><input type="text" id="item-rg" required maxlength="50"></div>
+        <div><label for="item-nome">Nome</label><input type="text" id="item-nome" required maxlength="150"></div>
+        <div><label for="item-quantidade">Quantidade</label><input type="number" id="item-quantidade" min="1" step="1" value="1" required></div>
+        <button type="submit">Adicionar item</button>
+      </form>
+      <ul id="lista-itens" class="lista-simples"></ul>
+
+      <h3>Demandas do projeto</h3>
+      <form id="form-demanda" class="form-linha" hidden>
+        <div>
+          <label for="demanda-atividade">Atividade</label>
+          <select id="demanda-atividade" required>
+            <option value="montagem">Montagem</option>
+            <option value="almoxarifado">Almoxarifado</option>
+            <option value="usinagem">Usinagem</option>
+          </select>
+        </div>
+        <div><label for="demanda-descricao">Descrição</label><input type="text" id="demanda-descricao" required maxlength="255"></div>
+        <div><label for="demanda-email">E-mail do responsável (vazio = você)</label><input type="email" id="demanda-email"></div>
+        <button type="submit">Criar demanda</button>
+      </form>
+      <ul id="lista-demandas-projeto" class="lista-simples"></ul>
+
+      <div class="form-linha">
+        <button id="btn-concluir" class="botao-secundario" hidden>Concluir projeto</button>
+        <button id="btn-fechar-detalhe" class="botao-secundario">Fechar</button>
+      </div>
+    </section>
+
+    <section class="painel">
+      <h2>Minhas demandas</h2>
+      <ul id="lista-demandas" class="lista-simples"></ul>
+    </section>
+  </main>
+
+  <div id="modal-upgrade" class="modal-overlay" hidden>
+    <div class="modal-caixa">
+      <h2 id="modal-titulo">Recurso do plano Expert</h2>
+      <p id="modal-texto">Essa ação exige o plano Expert.</p>
+      <div class="modal-botoes">
+        <button id="modal-btn-cancelar" class="botao-modal-cancelar">Agora não</button>
+        <button id="modal-btn-assinar">Ver planos</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="js/projetos.js"></script>
+</body>
+</html>

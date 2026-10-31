@@ -174,140 +174,6 @@ button:hover {
   text-align: center;
 }
 
-.grade-filmes {
-  max-width: 1100px;
-  margin: 0 auto;
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-  gap: 20px;
-}
-
-.card-filme {
-  background: var(--cor-superficie);
-  border: 1px solid var(--cor-borda-suave);
-  border-radius: 10px;
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
-}
-
-.card-filme:hover {
-  transform: translateY(-6px);
-  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.1);
-  border-color: var(--cor-primaria);
-}
-
-.poster {
-  width: 100%;
-  aspect-ratio: 2 / 3;
-  object-fit: cover;
-  background: var(--cor-borda-suave);
-}
-
-.conteudo-card {
-  padding: 14px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  flex: 1;
-}
-
-.titulo-filme {
-  font-size: 1rem;
-  margin: 0;
-  color: var(--cor-texto);
-}
-
-.sinopse {
-  font-size: 0.8rem;
-  color: var(--cor-texto-suave);
-  line-height: 1.4;
-  max-height: 4.2em;
-  overflow: hidden;
-}
-
-.botao-favoritar {
-  align-self: flex-start;
-  background: transparent;
-  border: 1px solid var(--cor-borda);
-  color: var(--cor-texto);
-  padding: 6px 12px;
-  border-radius: 6px;
-  cursor: pointer;
-  font-size: 0.85rem;
-  margin-top: 0;
-}
-
-.botao-favoritar.favoritado {
-  background: var(--cor-primaria);
-  border-color: var(--cor-primaria);
-  color: var(--cor-sobre-primaria);
-}
-
-.secao-comentarios {
-  margin-top: 8px;
-  border-top: 1px solid var(--cor-borda-suave);
-  padding-top: 10px;
-}
-
-.form-comentario {
-  display: flex;
-  flex-direction: row;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.input-comentario {
-  flex: 1 1 100%;
-  min-width: 0;
-  padding: 7px 10px;
-  border-radius: 6px;
-  border: 1px solid var(--cor-borda);
-  background: #ffffff;
-  color: var(--cor-texto);
-  font-size: 0.8rem;
-}
-
-.form-comentario button {
-  margin-top: 0;
-  padding: 7px 12px;
-  border: none;
-  border-radius: 6px;
-  background: var(--cor-primaria);
-  color: var(--cor-sobre-primaria);
-  font-size: 0.8rem;
-  cursor: pointer;
-  white-space: nowrap;
-  flex-shrink: 0;
-}
-
-.form-comentario button:hover {
-  background: var(--cor-primaria-escura);
-}
-
-.lista-comentarios {
-  list-style: none;
-  margin: 8px 0 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.lista-comentarios li {
-  font-size: 0.8rem;
-  color: #3f4a3f;
-  background: #ffffff;
-  border: 1px solid var(--cor-borda-suave);
-  padding: 6px 10px;
-  border-radius: 6px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-}
-
 /* ---------- área do usuário / admin ---------- */
 
 .area-usuario {
@@ -316,7 +182,7 @@ button:hover {
   gap: 12px;
 }
 
-.botao-apagar-comentario {
+.botao-apagar {
   background: transparent;
   border: none;
   cursor: pointer;
@@ -326,7 +192,7 @@ button:hover {
   flex-shrink: 0;
 }
 
-.botao-apagar-comentario:hover {
+.botao-apagar:hover {
   opacity: 0.7;
 }
 
@@ -338,17 +204,6 @@ button:hover {
   padding: 4px 10px;
   border-radius: 999px;
   text-transform: capitalize;
-}
-
-.linha-acoes {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.contagem-favoritos {
-  font-size: 0.75rem;
-  color: var(--cor-texto-suave);
 }
 
 .modal-overlay {
@@ -631,52 +486,6 @@ button:hover {
   font-size: 0.85rem;
 }
 
-.secao-favoritos > h2 {
-  display: none; /* título fica em .titulo-secao-favoritos, evita duplicar estilo do h1 */
-}
-
-.titulo-secao-favoritos {
-  display: flex;
-  align-items: baseline;
-  gap: 10px;
-  margin-bottom: 14px;
-}
-
-.titulo-secao-favoritos h2 {
-  display: block;
-  margin: 0;
-  font-size: 1.1rem;
-}
-
-.vazio-favoritos {
-  background: var(--cor-superficie);
-  border: 1px dashed var(--cor-borda);
-  border-radius: 10px;
-  padding: 32px;
-  text-align: center;
-  color: var(--cor-texto-suave);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 14px;
-}
-
-.vazio-favoritos p {
-  margin: 0;
-}
-
-.card-favorito {
-  cursor: default;
-}
-
-.card-favorito .conteudo-card {
-  padding: 10px 12px;
-}
-
-.card-favorito .titulo-filme {
-  font-size: 0.9rem;
-}
-
 @media (max-width: 560px) {
   .banner-perfil {
     height: 72px;
@@ -707,5 +516,128 @@ button:hover {
 .preco-plano {
   margin: 0;
   font-size: 1.4rem;
+  font-weight: 700;
+}
+
+/* ---------- telas do app (projetos e previsão) ---------- */
+
+.pagina-app main {
+  max-width: 1100px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.coluna-painel {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.painel {
+  background: var(--cor-superficie);
+  border: 1px solid var(--cor-borda-suave);
+  border-radius: 10px;
+  padding: 18px;
+}
+
+.painel h2 {
+  margin: 0 0 12px;
+  font-size: 1.1rem;
+}
+
+.painel h3 {
+  margin: 18px 0 8px;
+  font-size: 0.95rem;
+}
+
+.linha-titulo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.linha-titulo h2 {
+  margin: 0;
+}
+
+.texto-suave {
+  color: var(--cor-texto-suave);
+  font-size: 0.85rem;
+}
+
+.form-linha {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.form-linha label {
+  display: block;
+  margin: 0 0 4px;
+}
+
+.form-linha button {
+  margin-top: 0;
+}
+
+.lista-simples {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.lista-simples li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  background: #ffffff;
+  border: 1px solid var(--cor-borda-suave);
+  border-radius: 6px;
+  padding: 8px 12px;
+  font-size: 0.9rem;
+}
+
+.etiqueta {
+  margin-left: 8px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--cor-borda-suave);
+}
+
+select {
+  padding: 8px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--cor-borda);
+  background: #ffffff;
+  color: var(--cor-texto);
+  font-size: 0.9rem;
+}
+
+.barra {
+  flex-basis: 100%;
+  height: 10px;
+  border-radius: 5px;
+  background: var(--cor-primaria);
+}
+
+.barra.alerta {
+  background: var(--cor-erro);
+}
+
+.resultado-previsao {
+  margin: 8px 0 0;
+  font-size: 1.5rem;
   font-weight: 700;
 }
