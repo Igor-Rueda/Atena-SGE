@@ -69,3 +69,14 @@ services:
         condition: service_started
       log-service:
         condition: service_started
+
+  # regressão lê os projetos concluídos do mesmo MariaDB efêmero
+  regressao:
+    environment:
+      - DB_HOST=mariadb
+      - DB_USER=atenas_test
+      - DB_PASSWORD=teste
+      - DB_NAME=atenas_test
+    depends_on:
+      mariadb:
+        condition: service_healthy

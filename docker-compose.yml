@@ -4,12 +4,13 @@ services:
     image: igorrueda/atenas-app:latest
     env_file: .env
     ports:
-      - "3000:3000"
+      - "${PORT_APP:-3000}:${PORT_APP:-3000}"
     depends_on:
       - auth-service
       - log-service
       - profile-service
       - pagamentos
+      - regressao
 
   auth-service:
     build: ./auth-service
@@ -28,6 +29,20 @@ services:
       - auth-service
       - log-service
     restart: unless-stopped
+
+  # Regressão linear múltipla (Python). Sem "ports:" -- só o app fala com ele, com a
+  # INTERNAL_API_KEY. Não recebe chave do Stripe nem de e-mail: só precisa do banco.
+  regressao:
+    build: ./regressao
+    image: igorrueda/atenas-regressao:latest
+    env_file: .env
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import os,urllib.request; urllib.request.urlopen('http://localhost:' + os.environ.get('PORT_REGRESSAO', '6000') + '/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
 
   redis:
     image: redis:7-alpine
