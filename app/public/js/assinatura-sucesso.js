@@ -40,8 +40,8 @@ async function iniciar() {
 
         if (role !== roleAntes) {
           mensagem.textContent = `Tudo certo! Seu plano agora é ${role}. Redirecionando...`
-          mostrarLink('projetos.html', 'Ir para o painel')
-          setTimeout(() => { window.location.href = '/projetos.html' }, 2000)
+          mostrarLink('inicio.html', 'Ir para o painel')
+          setTimeout(() => { window.location.href = '/inicio.html' }, 2000)
           return
         }
       }
@@ -54,7 +54,7 @@ async function iniciar() {
 
   mensagem.textContent =
     'Seu pagamento foi recebido, mas a confirmação está demorando. Atualize a página em instantes ou faça login novamente.'
-  mostrarLink('projetos.html', 'Ir para o painel')
+  mostrarLink('inicio.html', 'Ir para o painel')
 }
 
 iniciar()

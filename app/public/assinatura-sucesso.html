@@ -4,13 +4,19 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Pagamento — Atenas SGE</title>
-  <link rel="stylesheet" href="css/index.css">
+  <link rel="stylesheet" href="css/tokens.css">
+  <link rel="stylesheet" href="css/base.css">
+  <link rel="stylesheet" href="css/componentes.css">
+  <link rel="stylesheet" href="css/auth.css">
 </head>
 <body>
-  <main>
-    <h1>Pagamento recebido</h1>
-    <p id="mensagem" class="status">Confirmando o seu pagamento...</p>
-    <a id="link-destino" href="projetos.html" class="botao-secundario" hidden>Ir para o painel</a>
+  <main class="auth-unico">
+    <div class="cartao auth__cartao">
+      <img class="auth__logo" style="margin:0 auto 1rem; height:96px" src="assets/logo.png" alt="Atenas SGE" onerror="this.style.display='none'">
+      <h1>Pagamento recebido</h1>
+      <p id="mensagem" class="texto-suave">Confirmando o seu pagamento...</p>
+      <a id="link-destino" href="inicio.html" class="botao" hidden>Ir para o painel</a>
+    </div>
   </main>
 
   <script src="js/assinatura-sucesso.js"></script>

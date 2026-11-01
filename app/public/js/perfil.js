@@ -17,8 +17,6 @@ const contadorBio = document.getElementById('contador-bio')
 const btnCancelarBio = document.getElementById('btn-cancelar-bio')
 
 
-const btnLogout = document.getElementById('btn-logout')
-
 const LIMITE_BIO = 280
 
 const params = new URLSearchParams(window.location.search)
@@ -207,9 +205,5 @@ inputFoto.addEventListener('change', async () => {
   }
 })
 
-btnLogout.addEventListener('click', async () => {
-  await fetch('/api/auth/logout', { method: 'POST' })
-  window.location.href = '/login.html'
-})
 
 iniciar()

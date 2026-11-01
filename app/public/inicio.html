@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Início — Atenas SGE</title>
+  <link rel="stylesheet" href="css/tokens.css">
+  <link rel="stylesheet" href="css/base.css">
+  <link rel="stylesheet" href="css/componentes.css">
+  <link rel="stylesheet" href="css/layout.css">
+  <link rel="stylesheet" href="css/paginas/inicio.css">
+</head>
+<body data-pagina="inicio">
+  <main>
+    <section class="hero">
+      <div>
+        <p class="hero__sobre">Painel</p>
+        <h1 id="saudacao">Bem-vindo</h1>
+        <p class="hero__texto">O Atenas SGE reúne projetos, itens e demandas num só lugar e mostra a cada pessoa apenas o que ela precisa para trabalhar ou decidir.</p>
+        <div class="hero__acoes">
+          <a class="botao" href="projetos.html"><span data-icone="mais" data-tamanho="18"></span>Novo projeto</a>
+          <a class="botao botao--secundario" href="demandas.html">Ver minhas demandas</a>
+        </div>
+      </div>
+      <img class="hero__logo" src="assets/logo.png" alt="" onerror="this.style.display='none'">
+    </section>
+
+    <section class="grade-kpi" aria-label="Resumo">
+      <div class="kpi">
+        <span class="icone-caixa"><span data-icone="pasta"></span></span>
+        <div><div class="kpi__valor" id="kpi-projetos">–</div><div class="kpi__rotulo">Projetos ativos · <span id="kpi-projetos-sub">carregando</span></div></div>
+      </div>
+      <div class="kpi">
+        <span class="icone-caixa"><span data-icone="lista"></span></span>
+        <div><div class="kpi__valor" id="kpi-demandas">–</div><div class="kpi__rotulo">Minhas demandas abertas</div></div>
+      </div>
+      <div class="kpi">
+        <span class="icone-caixa"><span data-icone="estrela"></span></span>
+        <div><div class="kpi__valor" id="kpi-plano">–</div><div class="kpi__rotulo">Seu plano</div></div>
+      </div>
+    </section>
+
+    <section class="secao">
+      <div class="secao__titulo"><h2>Como começar</h2></div>
+      <ol class="passos">
+        <li class="passo"><h3>Crie um projeto</h3><p>Dê um nome, uma descrição e um prazo em dias. Cada projeto reúne tudo o que será produzido.</p></li>
+        <li class="passo"><h3>Cadastre os itens</h3><p>Informe o RG, o nome e a quantidade de cada material. Eles aparecem na página do projeto.</p></li>
+        <li class="passo"><h3>Distribua as demandas</h3><p>Crie tarefas de montagem, almoxarifado ou usinagem e atribua a quem vai executá-las, pelo e-mail.</p></li>
+        <li class="passo"><h3>Conclua e aprenda</h3><p>Ao concluir, informe quantas pessoas foram usadas. Esse histórico melhora a previsão de equipe.</p></li>
+      </ol>
+    </section>
+
+    <section class="secao">
+      <div class="secao__titulo"><h2>Conheça a interface</h2></div>
+      <div class="guia">
+        <a class="guia-card" href="projetos.html">
+          <span class="icone-caixa"><span data-icone="pasta"></span></span>
+          <div><h3>Projetos</h3><p>Lista dos seus projetos. Clique em um para ver os dados, os itens (RGs) e as demandas.</p></div>
+        </a>
+        <a class="guia-card" href="demandas.html">
+          <span class="icone-caixa"><span data-icone="lista"></span></span>
+          <div><h3>Minhas demandas</h3><p>Só o que está sob a sua responsabilidade, com o andamento de cada tarefa. Nada além disso.</p></div>
+        </a>
+        <a class="guia-card" href="previsao.html">
+          <span class="icone-caixa"><span data-icone="grafico"></span></span>
+          <div><h3>Previsão de equipe <span class="etiqueta etiqueta--expert">Expert</span></h3><p>Estima quantos funcionários um projeto exige e mostra a carga de trabalho de cada pessoa.</p></div>
+        </a>
+        <a class="guia-card" href="planos.html">
+          <span class="icone-caixa"><span data-icone="estrela"></span></span>
+          <div><h3>Planos</h3><p>Compare o Professional (gratuito) com o Expert e assine quando precisar de mais.</p></div>
+        </a>
+        <a class="guia-card" href="perfil.html">
+          <span class="icone-caixa"><span data-icone="usuario"></span></span>
+          <div><h3>Perfil</h3><p>Sua foto e sua bio. É assim que as outras pessoas veem você no sistema.</p></div>
+        </a>
+      </div>
+    </section>
+
+    <section class="secao duas-colunas">
+      <article class="cartao" id="plano-conteudo"></article>
+      <article class="cartao cartao--em-breve">
+        <div class="cartao__cabecalho">
+          <h2><span class="icone-caixa"><span data-icone="engrenagem"></span></span> Gestão de processos</h2>
+          <span class="etiqueta">Em breve</span>
+        </div>
+        <p class="texto-suave">Um módulo para desenhar e acompanhar os processos da produção, do pedido à entrega, integrado aos projetos e às demandas que você já usa aqui.</p>
+      </article>
+    </section>
+  </main>
+
+  <script src="js/layout.js"></script>
+  <script src="js/inicio.js"></script>
+</body>
+</html>

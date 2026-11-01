@@ -4,20 +4,24 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Planos — Atenas SGE</title>
-  <link rel="stylesheet" href="css/index.css">
+  <link rel="stylesheet" href="css/tokens.css">
+  <link rel="stylesheet" href="css/base.css">
+  <link rel="stylesheet" href="css/componentes.css">
+  <link rel="stylesheet" href="css/layout.css">
+  <link rel="stylesheet" href="css/paginas/planos.css">
 </head>
-<body class="pagina-app">
-  <header class="topo">
-    <h1>Planos</h1>
-    <div class="area-usuario">
-      <a href="projetos.html" class="botao-secundario">Voltar aos projetos</a>
-    </div>
-  </header>
-
+<body data-pagina="planos">
   <main>
-    <div id="grade-planos" class="grade-planos"></div>
+    <header class="pagina-cabecalho">
+      <div>
+        <h1>Planos</h1>
+        <p>Comece grátis e assine o Expert quando a operação crescer.</p>
+      </div>
+    </header>
+    <div id="grade-planos" class="planos"></div>
   </main>
 
+  <script src="js/layout.js"></script>
   <script src="js/planos.js"></script>
 </body>
 </html>

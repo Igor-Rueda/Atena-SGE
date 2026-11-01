@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Projeto — Atenas SGE</title>
+  <link rel="stylesheet" href="css/tokens.css">
+  <link rel="stylesheet" href="css/base.css">
+  <link rel="stylesheet" href="css/componentes.css">
+  <link rel="stylesheet" href="css/layout.css">
+  <link rel="stylesheet" href="css/paginas/projeto.css">
+</head>
+<body data-pagina="projeto" data-menu="projetos">
+  <main>
+    <nav class="migalhas" aria-label="Você está em">
+      <a href="projetos.html">Projetos</a><span aria-hidden="true">/</span><span id="migalha-nome" aria-current="page">Carregando…</span>
+    </nav>
+
+    <p id="carregando" class="texto-suave">Carregando projeto…</p>
+
+    <div id="nao-encontrado" class="estado-vazio" hidden>
+      <span class="icone-caixa"><span data-icone="busca"></span></span>
+      <h3>Projeto não encontrado</h3>
+      <p>Ele pode ter sido removido, ou você não tem acesso a ele.</p>
+      <a class="botao" href="projetos.html">Voltar aos projetos</a>
+    </div>
+
+    <div id="conteudo-projeto" hidden>
+      <!-- topo: informações do projeto -->
+      <section class="cartao projeto-topo" aria-label="Dados do projeto">
+        <div class="projeto-topo__cabecalho">
+          <div class="projeto-topo__titulo">
+            <div class="linha-etiquetas" id="p-etiquetas"></div>
+            <h1 id="p-nome"></h1>
+            <p class="texto-suave sem-margem" id="p-descricao"></p>
+          </div>
+          <div class="projeto-topo__acoes">
+            <a class="botao botao--secundario" id="btn-prever" href="previsao.html" hidden><span data-icone="grafico" data-tamanho="18"></span>Prever equipe</a>
+            <button class="botao" id="btn-concluir" type="button" hidden><span data-icone="check" data-tamanho="18"></span>Concluir projeto</button>
+          </div>
+        </div>
+        <dl class="dados">
+          <div><dt>Prazo</dt><dd id="d-prazo">–</dd></div>
+          <div><dt>Criado em</dt><dd id="d-criado">–</dd></div>
+          <div><dt>Itens</dt><dd id="d-itens">–</dd></div>
+          <div><dt>Unidades</dt><dd id="d-unidades">–</dd></div>
+          <div><dt>Demandas</dt><dd id="d-demandas">–</dd></div>
+          <div><dt>Equipe real</dt><dd id="d-equipe">—</dd></div>
+        </dl>
+      </section>
+
+      <!-- itens: os RGs, conforme descemos -->
+      <section class="cartao bloco" aria-labelledby="titulo-itens">
+        <div class="cartao__cabecalho">
+          <h2 id="titulo-itens">Itens do projeto <span class="contador" id="c-itens">0</span></h2>
+          <button class="botao botao--pequeno" id="btn-add-item" type="button" hidden><span data-icone="mais" data-tamanho="16"></span>Adicionar item</button>
+        </div>
+
+        <form id="form-item" class="form-inline" hidden>
+          <div class="form-grade">
+            <div class="campo"><label for="item-rg">RG</label><input type="text" id="item-rg" required maxlength="50" placeholder="Ex.: EX1-001"></div>
+            <div class="campo"><label for="item-nome">Nome do item</label><input type="text" id="item-nome" required maxlength="150"></div>
+            <div class="campo"><label for="item-quantidade">Quantidade</label><input type="number" id="item-quantidade" min="1" step="1" value="1" required></div>
+          </div>
+          <div class="form-acoes" style="margin-bottom:1rem">
+            <button type="submit" class="botao botao--pequeno">Salvar item</button>
+            <button type="button" class="botao botao--secundario botao--pequeno" id="btn-cancelar-item">Cancelar</button>
+          </div>
+        </form>
+
+        <div class="bloco__ferramentas" id="ferramentas-itens" hidden>
+          <input type="search" id="busca-itens" class="busca" placeholder="Buscar por RG ou nome" aria-label="Buscar itens">
+        </div>
+
+        <div class="tabela-rolagem" id="tabela-itens" hidden>
+          <table class="tabela">
+            <thead><tr><th scope="col">RG</th><th scope="col">Item</th><th scope="col" class="num">Quantidade</th></tr></thead>
+            <tbody id="tbody-itens"></tbody>
+          </table>
+        </div>
+        <p id="sem-resultado" class="texto-suave" hidden>Nenhum item corresponde à busca.</p>
+        <div id="vazio-itens" class="estado-vazio" hidden>
+          <span class="icone-caixa"><span data-icone="caixa"></span></span>
+          <h3>Nenhum item cadastrado</h3>
+          <p>Os itens (RG, nome e quantidade) aparecem aqui, em ordem de cadastro.</p>
+        </div>
+      </section>
+
+      <!-- demandas -->
+      <section class="cartao bloco" aria-labelledby="titulo-demandas">
+        <div class="cartao__cabecalho">
+          <h2 id="titulo-demandas">Demandas <span class="contador" id="c-demandas">0</span></h2>
+          <button class="botao botao--pequeno" id="btn-add-demanda" type="button" hidden><span data-icone="mais" data-tamanho="16"></span>Nova demanda</button>
+        </div>
+
+        <form id="form-demanda" class="form-inline" hidden>
+          <div class="form-grade">
+            <div class="campo">
+              <label for="demanda-atividade">Atividade</label>
+              <select id="demanda-atividade" required>
+                <option value="montagem">Montagem</option>
+                <option value="almoxarifado">Almoxarifado</option>
+                <option value="usinagem">Usinagem</option>
+              </select>
+            </div>
+            <div class="campo"><label for="demanda-descricao">Descrição</label><input type="text" id="demanda-descricao" required maxlength="255"></div>
+            <div class="campo"><label for="demanda-email">E-mail do responsável</label><input type="email" id="demanda-email" placeholder="Vazio = você"></div>
+          </div>
+          <div class="form-acoes" style="margin-bottom:1rem">
+            <button type="submit" class="botao botao--pequeno">Criar demanda</button>
+            <button type="button" class="botao botao--secundario botao--pequeno" id="btn-cancelar-demanda">Cancelar</button>
+          </div>
+        </form>
+
+        <div class="lista-demandas" id="lista-demandas-projeto"></div>
+        <div id="vazio-demandas" class="estado-vazio" hidden>
+          <span class="icone-caixa"><span data-icone="lista"></span></span>
+          <h3>Nenhuma demanda</h3>
+          <p>As demandas deste projeto aparecem aqui. Você só vê as que são suas, a menos que tenha criado o projeto.</p>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <script src="js/layout.js"></script>
+  <script src="js/projeto.js"></script>
+</body>
+</html>

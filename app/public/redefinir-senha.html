@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Redefinir senha — Atenas SGE</title>
+  <link rel="stylesheet" href="css/tokens.css">
+  <link rel="stylesheet" href="css/base.css">
+  <link rel="stylesheet" href="css/componentes.css">
+  <link rel="stylesheet" href="css/auth.css">
+</head>
+<body>
+  <div class="auth">
+    <aside class="auth__marca">
+      <img class="auth__logo" src="assets/logo.png" alt="Atenas SGE" onerror="this.style.display='none'">
+      <h2>Atenas SGE</h2>
+      <p>Software de Gestão Empresarial para operações que precisam de clareza no chão de fábrica.</p>
+      <ul class="auth__lista">
+        <li>Projetos, itens e demandas num só lugar</li>
+        <li>Cada pessoa vê só o que precisa para trabalhar</li>
+        <li>Previsão de equipe com base no seu histórico</li>
+      </ul>
+    </aside>
+    <main class="auth__painel">
+      <div class="cartao auth__cartao">
+        <img class="auth__logo-mobile" src="assets/logo.png" alt="Atenas SGE" onerror="this.style.display='none'">
+        <h1>Redefinir senha</h1>
+        <p class="texto-suave">Escolha uma nova senha para a sua conta.</p>
+
+        <form id="form-redefinir-senha">
+          <div class="campo">
+            <label for="nova-senha">Nova senha</label>
+            <input type="password" id="nova-senha" name="nova-senha" required minlength="6" autocomplete="new-password">
+            <span class="campo__ajuda">Mínimo de 6 caracteres.</span>
+          </div>
+          <button type="submit" class="botao botao--bloco">Redefinir senha</button>
+        </form>
+
+        <p id="mensagem-status" class="aviso aviso--info" hidden></p>
+
+        <p class="auth__links"><a href="login.html">Voltar para o login</a></p>
+      </div>
+    </main>
+  </div>
+
+  <script src="js/redefinir-senha.js"></script>
+</body>
+</html>

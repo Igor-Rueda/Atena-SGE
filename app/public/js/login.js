@@ -25,7 +25,7 @@ form.addEventListener('submit', async (evento) => {
       return
     }
 
-    window.location.href = '/projetos.html'
+    window.location.href = '/inicio.html'
 
   } catch (err) {
     mensagemErro.textContent = 'Não foi possível conectar ao servidor.'

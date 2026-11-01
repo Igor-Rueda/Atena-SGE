@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Minhas demandas — Atenas SGE</title>
+  <link rel="stylesheet" href="css/tokens.css">
+  <link rel="stylesheet" href="css/base.css">
+  <link rel="stylesheet" href="css/componentes.css">
+  <link rel="stylesheet" href="css/layout.css">
+  <link rel="stylesheet" href="css/paginas/projetos.css">
+</head>
+<body data-pagina="demandas">
+  <main>
+    <header class="pagina-cabecalho">
+      <div>
+        <h1>Minhas demandas</h1>
+        <p>Somente o que está sob a sua responsabilidade.</p>
+      </div>
+    </header>
+
+    <div class="barra-filtros">
+      <div class="segmentos" role="group" aria-label="Filtrar por situação">
+        <button type="button" data-filtro="abertas" aria-pressed="true">Abertas</button>
+        <button type="button" data-filtro="concluidas" aria-pressed="false">Concluídas</button>
+        <button type="button" data-filtro="todas" aria-pressed="false">Todas</button>
+      </div>
+    </div>
+
+    <div class="lista-demandas" id="lista-demandas"></div>
+
+    <div id="vazio" class="estado-vazio" hidden>
+      <span class="icone-caixa"><span data-icone="lista"></span></span>
+      <h3>Nada por aqui</h3>
+      <p id="vazio-texto"></p>
+      <a class="botao" href="projetos.html">Ir para os projetos</a>
+    </div>
+  </main>
+
+  <script src="js/layout.js"></script>
+  <script src="js/demandas.js"></script>
+</body>
+</html>
