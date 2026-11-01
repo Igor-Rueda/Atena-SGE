@@ -1,4 +1,27 @@
-/* Telas de conta: login, cadastro, recuperação e confirmação de pagamento. */
+/* Telas de conta. Dois formatos:
+   - cartão simples centralizado: login (.auth-simples) e confirmação de pagamento (.auth-unico)
+   - duas colunas, com a marca à esquerda: cadastro e recuperação de senha (.auth) */
+
+/* ---------- cartão (comum aos dois formatos) ---------- */
+.auth__cartao { width: 100%; max-width: 420px; padding: 2rem; box-shadow: var(--sombra-m); }
+.auth__cartao h1 { margin-bottom: 0.25rem; }
+.auth__cartao > .texto-suave { margin-bottom: 1.5rem; }
+.auth__links { margin: 1.25rem 0 0; text-align: center; font-size: 0.88rem; color: var(--cor-texto-suave); }
+.auth__links + .auth__links { margin-top: 0.5rem; }
+
+/* ---------- login: cartão simples sobre o bege ---------- */
+.auth-simples { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 2rem 1rem; }
+.auth-simples .auth__cartao { max-width: 400px; }
+.auth-simples h1, .auth-simples .auth__cartao > .texto-suave { text-align: center; }
+/* altura fixa e largura automática: a logo mantém a proporção, nunca é esticada */
+.logo-login { display: block; width: auto; max-width: 100%; height: 120px; margin: 0 auto 1.25rem; object-fit: contain; }
+
+/* ---------- confirmação de pagamento: cartão único centralizado ---------- */
+.auth-unico { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 2rem 1rem; }
+.auth-unico .auth__cartao { text-align: center; }
+.auth-unico .botao { margin-top: 0.5rem; }
+
+/* ---------- duas colunas ---------- */
 .auth { min-height: 100vh; display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr); }
 
 .auth__marca {
@@ -7,7 +30,8 @@
   background: linear-gradient(160deg, var(--cor-superficie) 0%, #eadcc8 75%);
   border-right: 1px solid var(--cor-borda-suave);
 }
-.auth__logo { height: 150px; width: auto; }
+/* num contêiner em coluna os itens esticam na largura; align-self evita a logo achatada */
+.auth__logo { align-self: flex-start; height: 150px; width: auto; max-width: 100%; object-fit: contain; }
 .auth__marca h2 { margin: 0; font-size: 2.1rem; }
 .auth__marca > p { margin: 0; max-width: 38ch; color: var(--cor-texto-medio); font-size: 1.02rem; }
 .auth__lista { list-style: none; margin: 1rem 0 0; padding: 0; display: grid; gap: 0.85rem; }
@@ -19,17 +43,7 @@
 }
 
 .auth__painel { display: flex; align-items: center; justify-content: center; padding: 2rem 1.25rem; }
-.auth__cartao { width: 100%; max-width: 420px; padding: 2rem; box-shadow: var(--sombra-m); }
-.auth__cartao h1 { margin-bottom: 0.25rem; }
-.auth__cartao > .texto-suave { margin-bottom: 1.5rem; }
-.auth__logo-mobile { display: none; height: 84px; width: auto; margin: 0 auto 1rem; }
-.auth__links { margin: 1.25rem 0 0; text-align: center; font-size: 0.88rem; color: var(--cor-texto-suave); }
-.auth__links + .auth__links { margin-top: 0.5rem; }
-
-/* cartão único centralizado (confirmação de pagamento) */
-.auth-unico { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 2rem 1rem; }
-.auth-unico .auth__cartao { text-align: center; }
-.auth-unico .botao { margin-top: 0.5rem; }
+.auth__logo-mobile { display: none; height: 84px; width: auto; margin: 0 auto 1rem; object-fit: contain; }
 
 @media (max-width: 880px) {
   .auth { grid-template-columns: minmax(0, 1fr); }
