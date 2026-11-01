@@ -52,11 +52,11 @@ function exigirLogin(req, res, next) {
 }
 
 app.get('/', (req, res) => {
-  res.redirect(req.cookies.token ? '/projetos.html' : '/login.html')
+  res.redirect(req.cookies.token ? '/inicio.html' : '/login.html')
 })
 
 // páginas que exigem login: sem cookie válido, vai para o login
-for (const pagina of ['projetos.html', 'previsao.html']) {
+for (const pagina of ['inicio.html', 'projetos.html', 'projeto.html', 'demandas.html', 'previsao.html', 'planos.html', 'perfil.html']) {
   app.get(`/${pagina}`, exigirLogin, (req, res) => {
     res.sendFile(path.join(__dirname, 'public', pagina))
   })
