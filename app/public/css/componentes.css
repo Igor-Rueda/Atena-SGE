@@ -1,0 +1,192 @@
+/* ============================================================================
+   Componentes reutilizáveis: botões, formulários, cartões, etiquetas, tabelas,
+   avisos, modal, indicadores. Usados por todas as páginas.
+   ============================================================================ */
+
+/* ---------- botões ---------- */
+.botao {
+  display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem;
+  padding: 0.62rem 1.1rem;
+  border: 1px solid transparent; border-radius: var(--raio-p);
+  background: var(--cor-primaria); color: var(--cor-sobre-primaria);
+  font: inherit; font-size: 0.9rem; font-weight: 600; line-height: 1.2;
+  text-decoration: none; cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, box-shadow 0.15s, transform 0.05s;
+}
+.botao:hover { background: var(--cor-primaria-escura); }
+.botao:active { transform: translateY(1px); }
+.botao:disabled { opacity: 0.55; cursor: not-allowed; }
+.botao svg { width: 1.1em; height: 1.1em; flex: none; }
+
+.botao--secundario { background: var(--cor-campo); color: var(--cor-texto); border-color: var(--cor-borda); }
+.botao--secundario:hover { background: var(--cor-superficie); border-color: var(--cor-primaria); }
+.botao--fantasma { background: transparent; color: var(--cor-texto-medio); }
+.botao--fantasma:hover { background: var(--cor-superficie); color: var(--cor-texto); }
+.botao--perigo { background: var(--cor-campo); color: var(--cor-erro); border-color: #e3bdb7; }
+.botao--perigo:hover { background: var(--cor-erro-suave); border-color: var(--cor-erro); }
+.botao--pequeno { padding: 0.4rem 0.75rem; font-size: 0.82rem; }
+.botao--bloco { width: 100%; }
+
+/* ---------- formulários ---------- */
+.campo { display: flex; flex-direction: column; gap: 0.35rem; margin-bottom: 1rem; }
+.campo > label { font-size: 0.82rem; font-weight: 600; color: var(--cor-texto-medio); }
+.campo__ajuda { font-size: 0.78rem; color: var(--cor-texto-suave); }
+
+input, select, textarea {
+  width: 100%; padding: 0.62rem 0.8rem;
+  border: 1px solid var(--cor-borda); border-radius: var(--raio-p);
+  background: var(--cor-campo); color: var(--cor-texto);
+  font: inherit; font-size: 0.92rem;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+input:focus, select:focus, textarea:focus {
+  outline: none; border-color: var(--cor-primaria); box-shadow: 0 0 0 3px var(--cor-anel-foco);
+}
+input::placeholder, textarea::placeholder { color: #a38c78; }
+textarea { resize: vertical; min-height: 4.5rem; }
+select {
+  appearance: none; padding-right: 2.2rem; cursor: pointer;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5 6 6.5 11 1.5' fill='none' stroke='%237a5842' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 0.8rem center;
+}
+select.select-pequeno { width: auto; padding: 0.38rem 2rem 0.38rem 0.65rem; font-size: 0.82rem; }
+
+.form-grade { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 0 1rem; align-items: start; }
+.form-acoes { display: flex; gap: 0.6rem; flex-wrap: wrap; margin-top: 0.25rem; }
+
+/* ---------- cartões ---------- */
+.cartao {
+  background: var(--cor-campo);
+  border: 1px solid var(--cor-borda-suave); border-radius: var(--raio-g);
+  box-shadow: var(--sombra-p); padding: 1.4rem;
+}
+.cartao__cabecalho { display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; margin-bottom: 1rem; }
+.cartao__cabecalho h2 { margin: 0; display: flex; align-items: center; gap: 0.6rem; }
+.pilha > * + * { margin-top: 1.25rem; }
+
+.icone-caixa {
+  width: 42px; height: 42px; flex: none; border-radius: 12px;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--cor-primaria-suave); color: var(--cor-primaria-escura);
+}
+
+/* ---------- etiquetas e contadores ---------- */
+.etiqueta {
+  display: inline-flex; align-items: center; gap: 0.3rem;
+  padding: 0.18rem 0.6rem; border-radius: 999px;
+  background: var(--cor-borda-suave); color: var(--cor-texto-medio);
+  font-size: 0.72rem; font-weight: 700; letter-spacing: 0.02em; white-space: nowrap;
+}
+.etiqueta--ativo, .etiqueta--aberta { background: var(--cor-primaria-suave); color: var(--cor-primaria-escura); }
+.etiqueta--concluido, .etiqueta--concluida { background: var(--cor-sucesso-suave); color: var(--cor-sucesso); }
+.etiqueta--em_andamento { background: var(--cor-aviso-suave); color: var(--cor-aviso); }
+.etiqueta--expert { background: var(--cor-primaria); color: var(--cor-sobre-primaria); }
+.etiqueta--erro { background: var(--cor-erro-suave); color: var(--cor-erro); }
+.contador {
+  display: inline-block; min-width: 1.6rem; padding: 0.1rem 0.5rem; border-radius: 999px;
+  background: var(--cor-superficie); color: var(--cor-texto-suave);
+  font-family: var(--fonte-texto); font-size: 0.78rem; font-weight: 700; text-align: center;
+}
+
+/* ---------- avatar ---------- */
+.avatar {
+  width: 38px; height: 38px; flex: none; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--cor-primaria); color: var(--cor-sobre-primaria);
+  font-weight: 700; font-size: 0.85rem; text-transform: uppercase;
+}
+
+/* ---------- tabelas ---------- */
+.tabela-rolagem { overflow-x: auto; border: 1px solid var(--cor-borda-suave); border-radius: var(--raio-m); background: var(--cor-campo); }
+.tabela { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+.tabela th {
+  text-align: left; padding: 0.7rem 1rem; background: var(--cor-superficie);
+  color: var(--cor-texto-suave); font-size: 0.74rem; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.06em; border-bottom: 1px solid var(--cor-borda-suave);
+}
+.tabela td { padding: 0.75rem 1rem; border-bottom: 1px solid var(--cor-borda-suave); }
+.tabela tbody tr:last-child td { border-bottom: 0; }
+.tabela tbody tr:hover { background: var(--cor-fundo); }
+.tabela .num { text-align: right; font-variant-numeric: tabular-nums; }
+.codigo { font-family: var(--fonte-codigo); font-size: 0.85rem; font-weight: 600; color: var(--cor-primaria-escura); }
+
+/* ---------- indicadores (KPI) ---------- */
+.kpi {
+  display: flex; align-items: center; gap: 1rem; padding: 1.15rem 1.25rem;
+  background: var(--cor-campo); border: 1px solid var(--cor-borda-suave);
+  border-radius: var(--raio-g); box-shadow: var(--sombra-p);
+}
+.kpi__valor { font-family: var(--fonte-titulo); font-size: 1.7rem; font-weight: 700; line-height: 1.1; }
+.kpi__rotulo { font-size: 0.8rem; color: var(--cor-texto-suave); }
+
+/* ---------- estado vazio ---------- */
+.estado-vazio {
+  text-align: center; padding: 2.5rem 1.5rem;
+  border: 1px dashed var(--cor-borda); border-radius: var(--raio-g); color: var(--cor-texto-suave);
+}
+.estado-vazio .icone-caixa { margin: 0 auto 0.85rem; }
+.estado-vazio h3 { margin-bottom: 0.3rem; color: var(--cor-texto); }
+.estado-vazio p { max-width: 42ch; margin: 0 auto 1rem; }
+
+/* ---------- avisos em linha e notificações ---------- */
+.aviso { padding: 0.7rem 0.9rem; border-radius: var(--raio-p); font-size: 0.88rem; margin: 0.75rem 0; border: 1px solid transparent; }
+.aviso--erro { background: var(--cor-erro-suave); color: var(--cor-erro); border-color: #ecc5bf; }
+.aviso--info { background: var(--cor-primaria-suave); color: var(--cor-primaria-escura); border-color: var(--cor-borda); }
+.aviso--sucesso { background: var(--cor-sucesso-suave); color: var(--cor-sucesso); border-color: #cbd9b8; }
+
+.avisos { position: fixed; top: 1rem; right: 1rem; z-index: 200; display: flex; flex-direction: column; gap: 0.5rem; max-width: min(92vw, 380px); }
+.toast {
+  padding: 0.8rem 1rem; border-radius: var(--raio-m);
+  background: var(--cor-texto); color: var(--cor-sobre-primaria);
+  box-shadow: var(--sombra-g); font-size: 0.9rem; animation: toast-entrar 0.2s ease;
+}
+.toast--erro { background: #7d2a23; }
+.toast--sucesso { background: #3f5a2e; }
+.toast--saindo { opacity: 0; transform: translateY(-6px); transition: opacity 0.25s, transform 0.25s; }
+@keyframes toast-entrar { from { opacity: 0; transform: translateY(-8px); } }
+
+/* ---------- modal ---------- */
+.modal {
+  position: fixed; inset: 0; z-index: 100; display: flex; align-items: center; justify-content: center;
+  padding: 1rem; background: rgba(63, 35, 21, 0.5); animation: modal-fundo 0.15s ease;
+}
+.modal__caixa {
+  width: 100%; max-width: 420px; padding: 1.75rem;
+  background: var(--cor-campo); border-radius: var(--raio-g); box-shadow: var(--sombra-g);
+  animation: modal-caixa 0.18s ease;
+}
+.modal__caixa h2 { margin-bottom: 0.5rem; }
+.modal__acoes { display: flex; justify-content: flex-end; gap: 0.6rem; margin-top: 1.25rem; }
+@keyframes modal-fundo { from { opacity: 0; } }
+@keyframes modal-caixa { from { opacity: 0; transform: translateY(8px) scale(0.98); } }
+
+/* ---------- filtros em segmentos ---------- */
+.segmentos { display: inline-flex; gap: 0.15rem; padding: 0.25rem; background: var(--cor-superficie); border: 1px solid var(--cor-borda-suave); border-radius: 10px; }
+.segmentos button {
+  padding: 0.4rem 0.9rem; border: 0; border-radius: 8px; background: transparent;
+  color: var(--cor-texto-medio); font: inherit; font-size: 0.85rem; font-weight: 600; cursor: pointer;
+}
+.segmentos button[aria-pressed="true"] { background: var(--cor-campo); color: var(--cor-texto); box-shadow: var(--sombra-p); }
+
+/* ---------- linhas de demanda (usadas no projeto e em "minhas demandas") ---------- */
+.lista-demandas { display: grid; gap: 0.6rem; }
+.demanda {
+  display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 0.75rem 1rem; align-items: center;
+  padding: 0.85rem 1rem; background: var(--cor-campo);
+  border: 1px solid var(--cor-borda-suave); border-radius: var(--raio-m);
+}
+.demanda__info { min-width: 0; }
+.demanda__info strong { display: block; overflow-wrap: anywhere; }
+.demanda__info small { color: var(--cor-texto-suave); }
+.demanda__acoes { display: flex; align-items: center; gap: 0.5rem; }
+@media (max-width: 640px) {
+  .demanda { grid-template-columns: 1fr; }
+  .demanda__acoes { justify-content: space-between; }
+}
+
+/* ---------- barras (carga por funcionário) ---------- */
+.barra-linha { display: grid; gap: 0.3rem; margin-bottom: 0.9rem; }
+.barra-linha__rotulo { display: flex; justify-content: space-between; font-size: 0.88rem; }
+.barra-trilho { height: 10px; border-radius: 999px; background: var(--cor-borda-suave); overflow: hidden; }
+.barra { height: 100%; border-radius: 999px; background: var(--cor-primaria); }
+.barra--alerta { background: var(--cor-erro); }

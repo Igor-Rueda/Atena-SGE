@@ -1,0 +1,32 @@
+/* Perfil */
+.perfil-cartao { max-width: 760px; padding: 0; overflow: hidden; }
+.perfil-banner { height: 110px; background: linear-gradient(120deg, var(--cor-primaria), var(--cor-borda)); }
+.perfil-corpo { display: flex; flex-direction: column; gap: 0.4rem; padding: 0 1.75rem 1.75rem; }
+
+.avatar-wrapper { position: relative; width: 112px; height: 112px; margin-top: -56px; margin-bottom: 0.4rem; }
+.avatar-foto, .avatar-iniciais {
+  position: absolute; inset: 0; width: 112px; height: 112px;
+  border-radius: 50%; border: 4px solid var(--cor-campo);
+}
+.avatar-foto { object-fit: cover; background: var(--cor-superficie); }
+.avatar-iniciais {
+  display: flex; align-items: center; justify-content: center;
+  background: var(--cor-primaria); color: var(--cor-sobre-primaria);
+  font-family: var(--fonte-titulo); font-size: 2.4rem; font-weight: 700;
+}
+.botao-avatar {
+  position: absolute; right: 2px; bottom: 2px; width: 32px; height: 32px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--cor-texto); color: var(--cor-sobre-primaria); border: 2px solid var(--cor-campo); cursor: pointer;
+}
+.botao-avatar:hover { background: var(--cor-texto-medio); }
+
+.linha-nome { display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
+.linha-nome h2 { margin: 0; font-size: 1.5rem; }
+.bio-texto { max-width: 60ch; margin: 0.4rem 0 0; color: var(--cor-texto-medio); }
+.erro-inline { margin: 0.25rem 0 0; color: var(--cor-erro); font-size: 0.82rem; }
+
+.form-bio { display: flex; flex-direction: column; gap: 0.6rem; max-width: 60ch; margin-top: 0.6rem; }
+.form-bio-rodape { display: flex; align-items: center; justify-content: space-between; }
+.form-bio-botoes { display: flex; gap: 0.5rem; }
+.contador-bio { font-size: 0.78rem; color: var(--cor-texto-suave); }

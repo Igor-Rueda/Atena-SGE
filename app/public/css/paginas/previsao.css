@@ -1,0 +1,17 @@
+/* Previsão de equipe (regressão linear múltipla) */
+.previsao-grade { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr); gap: 1rem; margin-bottom: 1rem; }
+.resultado {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.35rem;
+  min-height: 220px; padding: 1.5rem; text-align: center;
+  background: linear-gradient(160deg, var(--cor-primaria-suave), var(--cor-superficie));
+  border: 1px solid var(--cor-borda); border-radius: var(--raio-g);
+}
+.resultado__rotulo { font-size: 0.78rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--cor-texto-suave); }
+.resultado__numero { font-family: var(--fonte-titulo); font-size: 3.6rem; font-weight: 700; line-height: 1; color: var(--cor-primaria-escura); }
+.resultado__unidade { color: var(--cor-texto-medio); }
+.resultado__detalhe { max-width: 34ch; margin: 0.5rem 0 0; color: var(--cor-texto-suave); font-size: 0.82rem; }
+.resultado--vazio .resultado__numero { color: var(--cor-borda); }
+.separador { margin: 0.5rem 0 1.25rem; border: 0; border-top: 1px solid var(--cor-borda-suave); }
+.bloqueio { max-width: 560px; margin: 2rem auto; text-align: center; padding: 2.25rem; }
+.bloqueio .icone-caixa { margin: 0 auto 1rem; }
+@media (max-width: 1000px) { .previsao-grade { grid-template-columns: minmax(0, 1fr); } }

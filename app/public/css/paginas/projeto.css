@@ -1,0 +1,16 @@
+/* Página de um projeto: informações no topo, itens (RGs) e demandas ao descer */
+.projeto-topo { margin-bottom: 1.5rem; padding: clamp(1.25rem, 3vw, 2rem); }
+.projeto-topo__cabecalho { display: flex; justify-content: space-between; align-items: flex-start; gap: 1.5rem; flex-wrap: wrap; }
+.projeto-topo__titulo { min-width: 0; flex: 1 1 320px; }
+.projeto-topo h1 { overflow-wrap: anywhere; }
+.projeto-topo__acoes { display: flex; gap: 0.6rem; flex-wrap: wrap; }
+.linha-etiquetas { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 0.7rem; }
+
+.dados { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1.1rem; margin: 1.5rem 0 0; padding-top: 1.25rem; border-top: 1px solid var(--cor-borda-suave); }
+.dados dt { font-size: 0.72rem; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase; color: var(--cor-texto-suave); }
+.dados dd { margin: 0.2rem 0 0; font-family: var(--fonte-titulo); font-size: 1.2rem; font-weight: 700; }
+
+.bloco { margin-bottom: 1.5rem; }
+.bloco__ferramentas { display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap; margin-bottom: 0.9rem; }
+.busca { max-width: 280px; }
+.form-inline { margin-bottom: 1.1rem; padding: 1.1rem 1.1rem 0.25rem; background: var(--cor-fundo); border: 1px solid var(--cor-borda-suave); border-radius: var(--raio-m); }

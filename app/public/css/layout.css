@@ -1,0 +1,72 @@
+/* ============================================================================
+   Casca do aplicativo: menu lateral, conteúdo e cabeçalho de página.
+   O menu é montado por js/layout.js, então as páginas só trazem o <main>.
+   ============================================================================ */
+.app { display: grid; grid-template-columns: var(--largura-menu) minmax(0, 1fr); min-height: 100vh; }
+
+/* ---------- menu lateral ---------- */
+.menu {
+  position: sticky; top: 0; height: 100vh; display: flex; flex-direction: column;
+  padding: 1.25rem 1rem; background: var(--cor-campo); border-right: 1px solid var(--cor-borda-suave);
+}
+.menu__marca { display: flex; align-items: center; gap: 0.75rem; padding: 0.25rem 0.5rem 1.4rem; color: var(--cor-texto); text-decoration: none; }
+.menu__marca img { width: 34px; height: auto; flex: none; }
+.menu__marca strong { display: block; font-family: var(--fonte-titulo); font-size: 1.2rem; line-height: 1.1; }
+.menu__marca small { font-size: 0.66rem; letter-spacing: 0.16em; text-transform: uppercase; color: var(--cor-texto-suave); }
+
+.menu__nav { display: flex; flex-direction: column; gap: 0.2rem; flex: 1; overflow-y: auto; }
+.menu__titulo { padding: 0.9rem 0.75rem 0.35rem; font-size: 0.68rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--cor-texto-suave); }
+.menu__link {
+  display: flex; align-items: center; gap: 0.75rem; padding: 0.62rem 0.75rem;
+  border-radius: var(--raio-p); color: var(--cor-texto-medio);
+  font-size: 0.92rem; font-weight: 500; text-decoration: none; transition: background 0.15s, color 0.15s;
+}
+.menu__link:hover { background: var(--cor-fundo); color: var(--cor-texto); }
+.menu__link[aria-current="page"] {
+  background: var(--cor-primaria-suave); color: var(--cor-primaria-escura);
+  font-weight: 700; box-shadow: inset 3px 0 0 var(--cor-primaria);
+}
+.menu__cadeado { margin-left: auto; opacity: 0.55; display: flex; }
+
+.menu__rodape { display: flex; flex-direction: column; gap: 0.75rem; padding-top: 1rem; border-top: 1px solid var(--cor-borda-suave); }
+.usuario { display: flex; align-items: center; gap: 0.7rem; min-width: 0; }
+.usuario__dados { min-width: 0; display: flex; flex-direction: column; gap: 0.15rem; align-items: flex-start; }
+.usuario__dados strong { max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.9rem; }
+
+/* ---------- área principal ---------- */
+.principal { min-width: 0; display: flex; flex-direction: column; }
+.conteudo { width: 100%; max-width: 1160px; margin: 0 auto; padding: 2rem clamp(1rem, 3vw, 2.5rem) 4rem; }
+
+.topo-mobile { display: none; }
+.menu-fundo { display: none; }
+
+.pagina-cabecalho { display: flex; align-items: flex-end; justify-content: space-between; gap: 1rem; flex-wrap: wrap; margin-bottom: 1.5rem; }
+.pagina-cabecalho h1 { margin: 0; }
+.pagina-cabecalho p { margin: 0.3rem 0 0; color: var(--cor-texto-suave); }
+
+.migalhas { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 1rem; font-size: 0.85rem; color: var(--cor-texto-suave); }
+.migalhas a { color: var(--cor-texto-suave); text-decoration: none; }
+.migalhas a:hover { color: var(--cor-primaria-escura); text-decoration: underline; }
+.migalhas [aria-current] { color: var(--cor-texto); font-weight: 600; }
+
+.secao { margin-bottom: 2.25rem; }
+.secao__titulo { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; margin-bottom: 0.9rem; }
+.secao__titulo h2 { margin: 0; }
+
+/* ---------- telas pequenas: o menu vira gaveta ---------- */
+@media (max-width: 960px) {
+  .app { grid-template-columns: minmax(0, 1fr); }
+  .menu {
+    position: fixed; inset: 0 auto 0 0; z-index: 60; width: min(84vw, 300px);
+    transform: translateX(-100%); transition: transform 0.22s ease; box-shadow: var(--sombra-g);
+  }
+  .app.menu-aberto .menu { transform: none; }
+  .app.menu-aberto .menu-fundo { display: block; position: fixed; inset: 0; z-index: 55; background: rgba(63, 35, 21, 0.45); }
+  .topo-mobile {
+    display: flex; align-items: center; gap: 0.75rem; position: sticky; top: 0; z-index: 40;
+    padding: 0.7rem 1rem; background: var(--cor-campo); border-bottom: 1px solid var(--cor-borda-suave);
+  }
+  .topo-mobile img { height: 30px; width: auto; }
+  .topo-mobile strong { font-family: var(--fonte-titulo); font-size: 1.1rem; }
+  .conteudo { padding-top: 1.5rem; }
+}

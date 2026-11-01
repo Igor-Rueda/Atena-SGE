@@ -1,0 +1,21 @@
+/* Lista de projetos */
+.barra-filtros { display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; margin-bottom: 1.25rem; }
+.form-novo { margin-bottom: 1.5rem; }
+.grade-projetos { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 1rem; }
+
+.projeto-card {
+  display: flex; flex-direction: column; gap: 0.75rem; padding: 1.25rem;
+  background: var(--cor-campo); border: 1px solid var(--cor-borda-suave); border-radius: var(--raio-g);
+  box-shadow: var(--sombra-p); color: inherit; text-decoration: none;
+  transition: transform 0.15s, box-shadow 0.15s, border-color 0.15s;
+}
+.projeto-card:hover { transform: translateY(-2px); box-shadow: var(--sombra-m); border-color: var(--cor-borda); }
+.projeto-card__etiquetas { display: flex; gap: 0.4rem; flex-wrap: wrap; }
+.projeto-card h3 { margin: 0; font-size: 1.12rem; overflow-wrap: anywhere; }
+.projeto-card p {
+  margin: 0; min-height: 2.9em; color: var(--cor-texto-suave); font-size: 0.9rem;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+.projeto-card__meta { display: flex; gap: 1.1rem; margin-top: auto; padding-top: 0.75rem; border-top: 1px solid var(--cor-borda-suave); color: var(--cor-texto-suave); font-size: 0.82rem; }
+.projeto-card__meta span { display: inline-flex; align-items: center; gap: 0.35rem; }
+.projeto-card__abrir { display: flex; align-items: center; gap: 0.35rem; color: var(--cor-primaria-escura); font-size: 0.88rem; font-weight: 600; }

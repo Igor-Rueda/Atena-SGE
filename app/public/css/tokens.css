@@ -1,0 +1,49 @@
+/* ============================================================================
+   Tokens de design do Atenas SGE — paleta tirada do logo (bege pastel + bronze).
+   Todas as outras folhas usam estas variáveis: para mudar o visual, mude aqui.
+   ============================================================================ */
+:root {
+  /* superfícies */
+  --cor-fundo: #f8f2e9;            /* fundo da página: bege bem claro */
+  --cor-superficie: #f2e9db;       /* áreas rebaixadas, cabeçalhos de tabela */
+  --cor-campo: #fffcf7;            /* cartões, campos e modais: branco quente */
+
+  /* marca */
+  --cor-primaria: #8f6748;         /* bronze do elmo (contraste 4,8 com o texto claro) */
+  --cor-primaria-escura: #744d34;  /* hover e links */
+  --cor-primaria-suave: #efe2d1;   /* fundos de destaque leve */
+  --cor-sobre-primaria: #fffaf3;   /* texto sobre o bronze */
+  --cor-anel-foco: rgba(143, 103, 72, 0.28);
+
+  /* bordas */
+  --cor-borda: #dcc7b1;
+  --cor-borda-suave: #eadcc8;
+
+  /* texto */
+  --cor-texto: #3f2a1d;            /* marrom escuro da crista */
+  --cor-texto-medio: #5a4332;
+  --cor-texto-suave: #7a5842;
+
+  /* estados */
+  --cor-erro: #a63d34;
+  --cor-erro-suave: #f6e1dd;
+  --cor-sucesso: #4f6b3a;
+  --cor-sucesso-suave: #e4ecd8;
+  --cor-aviso: #8a5a14;
+  --cor-aviso-suave: #f6e8c8;
+
+  /* tipografia: títulos com serifa (ar clássico, combina com o logo), texto sem serifa */
+  --fonte-texto: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --fonte-titulo: "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif;
+  --fonte-codigo: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  /* formas e sombras (quentes, em marrom, e não em preto) */
+  --raio-p: 8px;
+  --raio-m: 12px;
+  --raio-g: 18px;
+  --sombra-p: 0 1px 2px rgba(63, 35, 21, 0.06), 0 1px 3px rgba(63, 35, 21, 0.05);
+  --sombra-m: 0 6px 18px rgba(63, 35, 21, 0.09);
+  --sombra-g: 0 20px 44px rgba(63, 35, 21, 0.18);
+
+  --largura-menu: 252px;
+}
