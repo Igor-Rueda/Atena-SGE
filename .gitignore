@@ -4,3 +4,4 @@ node_modules
 garage.toml
 Typst
 venv
+*-analise

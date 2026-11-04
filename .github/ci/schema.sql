@@ -8,12 +8,15 @@
 -- porque usa CREATE TABLE IF NOT EXISTS (tabelas que já existem são mantidas).
 -- Execute com o banco já selecionado (ex.: USE nome_do_banco;).
 --
+-- Para um banco que JÁ TEM tabelas de uma versão anterior, rode também as alterações do
+-- arquivo 02-migracao.sql (colunas novas em usuarios e itens).
+--
 -- Quem usa o quê:
 --   usuarios, reset_tokens ........ auth-service
 --   perfis ........................ profile-service (bio e referência da foto)
 --   clientes_stripe ............... pagamentos
---   processos, projetos, itens,
---   demandas ...................... app (e regressao, que lê projetos/itens/demandas)
+--   projetos, itens, demandas ..... app
+--   modelos_regressao ............. regressao (modelo treinado de cada usuário)
 -- ============================================================================
 
 CREATE TABLE IF NOT EXISTS usuarios (
@@ -21,7 +24,8 @@ CREATE TABLE IF NOT EXISTS usuarios (
   nome VARCHAR(100) NOT NULL,
   email VARCHAR(150) UNIQUE NOT NULL,
   senha_hash VARCHAR(255) NOT NULL,
-  role VARCHAR(20) NOT NULL DEFAULT 'professional',  -- professional < expert < admin
+  role VARCHAR(20) NOT NULL DEFAULT 'professional',    -- plano: professional < expert < admin
+  categoria VARCHAR(20) NOT NULL DEFAULT 'superior',   -- superior | planejador | almoxarife | operador | montador
   criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -51,19 +55,7 @@ CREATE TABLE IF NOT EXISTS clientes_stripe (
   FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE CASCADE
 );
 
--- processos produtivos (ex.: "corte de chapa", "montagem do conjunto A")
-CREATE TABLE IF NOT EXISTS processos (
-  id INT AUTO_INCREMENT PRIMARY KEY,
-  nome VARCHAR(150) NOT NULL,
-  atividade VARCHAR(20) NOT NULL,              -- montagem | almoxarifado | usinagem
-  criado_por INT NOT NULL,
-  criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  FOREIGN KEY (criado_por) REFERENCES usuarios(id)
-);
-
 -- status: ativo | concluido. Só projetos ATIVOS contam no limite do plano Professional.
--- funcionarios_usados: número real de funcionários, informado ao concluir; é a variável
--- que a regressão linear múltipla aprende a prever.
 CREATE TABLE IF NOT EXISTS projetos (
   id INT AUTO_INCREMENT PRIMARY KEY,
   nome VARCHAR(150) NOT NULL,
@@ -78,34 +70,52 @@ CREATE TABLE IF NOT EXISTS projetos (
   INDEX idx_projetos_dono_status (criado_por, status)
 );
 
--- cada material tem um RG, uma quantidade e o projeto a que pertence
+-- cada material tem um RG, uma quantidade e o projeto a que pertence.
+-- concluido = o item já foi CONSUMIDO NA MONTAGEM (a soma das quantidades concluídas no mês é a "demanda").
 CREATE TABLE IF NOT EXISTS itens (
   id INT AUTO_INCREMENT PRIMARY KEY,
   projeto_id INT NOT NULL,
   rg VARCHAR(50) NOT NULL,
   nome VARCHAR(150) NOT NULL,
   quantidade INT NOT NULL DEFAULT 1,
+  concluido BOOLEAN NOT NULL DEFAULT FALSE,
+  concluido_em TIMESTAMP NULL,
+  concluido_por INT NULL,
   criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (projeto_id) REFERENCES projetos(id) ON DELETE CASCADE,
-  UNIQUE (projeto_id, rg)
+  UNIQUE (projeto_id, rg),
+  INDEX idx_itens_concluidos (concluido, concluido_em)
 );
 
--- demanda: trabalho de uma atividade dentro de um projeto, atribuído a um responsável.
+-- demanda: trabalho de um PROCESSO dentro de um projeto, atribuído a um responsável.
+-- atividade = processo: planejamento | almoxarifado | fabricacao | montagem (nesta ordem no fluxo).
 -- Todo usuário vê só as demandas em que é responsável; excluir exige expert/admin.
 CREATE TABLE IF NOT EXISTS demandas (
   id INT AUTO_INCREMENT PRIMARY KEY,
   projeto_id INT NOT NULL,
-  processo_id INT NULL,
-  atividade VARCHAR(20) NOT NULL,              -- montagem | almoxarifado | usinagem
+  atividade VARCHAR(20) NOT NULL,
   descricao VARCHAR(255) NOT NULL,
   responsavel_id INT NOT NULL,
   status VARCHAR(20) NOT NULL DEFAULT 'aberta',  -- aberta | em_andamento | concluida
   criado_por INT NOT NULL,
   criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (projeto_id) REFERENCES projetos(id) ON DELETE CASCADE,
-  FOREIGN KEY (processo_id) REFERENCES processos(id) ON DELETE SET NULL,
   FOREIGN KEY (responsavel_id) REFERENCES usuarios(id),
   FOREIGN KEY (criado_por) REFERENCES usuarios(id),
   INDEX idx_demandas_responsavel (responsavel_id, status),
   INDEX idx_demandas_criador (criado_por, status)
+);
+
+-- modelo de regressão treinado por cada usuário (uma linha por recurso de análise).
+-- resultado: JSON com coeficientes, métricas, faixa dos dados e pontos do ajuste.
+CREATE TABLE IF NOT EXISTS modelos_regressao (
+  usuario_id INT NOT NULL,
+  recurso VARCHAR(40) NOT NULL,
+  nome_arquivo VARCHAR(200),
+  alvo VARCHAR(100) NOT NULL,
+  n_linhas INT NOT NULL,
+  resultado LONGTEXT NOT NULL,
+  treinado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (usuario_id, recurso),
+  FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE CASCADE
 );
