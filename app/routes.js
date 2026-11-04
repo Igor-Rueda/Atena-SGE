@@ -22,7 +22,19 @@ const TAMANHO_MAXIMO_MB = Number(process.env.PROFILE_IMAGE_MAX_SIZE_MB || 5)
 //   admin:        administrador do produto, usado para testar rotas; não é vendável
 const HIERARQUIA = ['professional', 'expert', 'admin']
 
-const ATIVIDADES = ['montagem', 'almoxarifado', 'usinagem']
+// Processos da produção, na ordem do fluxo: Planejamento -> Almoxarifado -> Fabricação -> Montagem.
+const PROCESSOS = ['planejamento', 'almoxarifado', 'fabricacao', 'montagem']
+const ROTULO_PROCESSO = { planejamento: 'Planejamento', almoxarifado: 'Almoxarifado', fabricacao: 'Fabricação', montagem: 'Montagem' }
+
+// Categorias de usuário. O Superior está no topo; as outras quatro atuam em um processo e ficam no
+// mesmo nível hierárquico. Cada processo é conduzido pela categoria correspondente.
+const ROTULO_CATEGORIA = { superior: 'Superior', planejador: 'Planejador', almoxarife: 'Almoxarife', operador: 'Operador', montador: 'Montador' }
+const CATEGORIA_DO_PROCESSO = { planejamento: 'planejador', almoxarifado: 'almoxarife', fabricacao: 'operador', montagem: 'montador' }
+
+// tokens emitidos antes das categorias não têm o campo: tratam-se como Superior
+function categoriaDe(usuario) {
+  return usuario.categoria || 'superior'
+}
 const STATUS_DEMANDA = ['aberta', 'em_andamento', 'concluida']
 
 // Limites do plano gratuito. Só contam o que está ATIVO: projeto concluído e demanda
@@ -153,7 +165,8 @@ router.get('/me', exigirLogin, (req, res) => {
   res.json({
     usuario_id: req.usuario.usuario_id,
     nome: req.usuario.nome,
-    role: req.usuario.role
+    role: req.usuario.role,
+    categoria: categoriaDe(req.usuario)
   })
 })
 
@@ -266,40 +279,6 @@ router.post('/auth/redefinir-senha', async (req, res) => {
   }
 })
 
-// ---------- PROCESSOS ----------
-
-router.get('/processos', exigirLogin, async (req, res) => {
-  try {
-    const [linhas] = ehAdmin(req)
-      ? await db.query('SELECT * FROM processos ORDER BY id DESC')
-      : await db.query('SELECT * FROM processos WHERE criado_por = ? ORDER BY id DESC', [req.usuario.usuario_id])
-    res.json(linhas)
-  } catch (err) {
-    console.error(err)
-    res.status(500).json({ mensagem: 'Erro ao buscar processos.' })
-  }
-})
-
-router.post('/processos', exigirLogin, limitadorEscrita, async (req, res) => {
-  const nome = String(req.body.nome || '').trim()
-  const atividade = req.body.atividade
-
-  if (!nome || nome.length > 150 || !ATIVIDADES.includes(atividade)) {
-    return res.status(400).json({ mensagem: 'Informe o nome e a atividade (montagem, almoxarifado ou usinagem).' })
-  }
-
-  try {
-    const [resultado] = await db.query(
-      'INSERT INTO processos (nome, atividade, criado_por) VALUES (?, ?, ?)',
-      [nome, atividade, req.usuario.usuario_id]
-    )
-    res.status(201).json({ id: resultado.insertId })
-  } catch (err) {
-    console.error(err)
-    res.status(500).json({ mensagem: 'Erro ao cadastrar processo.' })
-  }
-})
-
 // ---------- PROJETOS ----------
 
 // Carrega o projeto e confere o acesso. Dono (criador) e admin enxergam tudo; quem só é
@@ -401,7 +380,7 @@ router.get('/projetos/:id', exigirLogin, async (req, res) => {
     if (!acesso) return
     const { projeto, souDono } = acesso
 
-    const [itens] = await db.query('SELECT id, rg, nome, quantidade FROM itens WHERE projeto_id = ? ORDER BY id', [projeto.id])
+    const [itens] = await db.query('SELECT id, rg, nome, quantidade, concluido, concluido_em FROM itens WHERE projeto_id = ? ORDER BY id', [projeto.id])
 
     // dono e admin veem todas as demandas do projeto; o responsável vê só as dele
     const baseDemandas = `SELECT d.id, d.atividade, d.descricao, d.status, d.responsavel_id, u.nome AS responsavel_nome
@@ -500,16 +479,56 @@ router.patch('/projetos/:id/concluir', exigirLogin, limitadorEscrita, async (req
   }
 })
 
+// ---------- ITENS: consumo na montagem ----------
+// Um item está "concluído" quando já foi consumido na montagem. Quem registra: quem criou o
+// projeto (Superior), o admin ou um Montador com acesso ao projeto (por uma demanda atribuída a ele).
+router.patch('/projetos/:id/itens/:itemId/concluir', exigirLogin, limitadorEscrita, async (req, res) => {
+  const itemId = Number(req.params.itemId)
+  const concluido = req.body.concluido === true || req.body.concluido === 'true'
+
+  if (!Number.isInteger(itemId) || itemId <= 0) {
+    return res.status(400).json({ mensagem: 'Id de item inválido.' })
+  }
+
+  try {
+    const acesso = await carregarProjeto(req, res)
+    if (!acesso) return
+    if (!(acesso.souDono || categoriaDe(req.usuario) === 'montador')) {
+      return res.status(403).json({ mensagem: 'Só o Montador (ou quem criou o projeto) registra o consumo de itens.' })
+    }
+
+    const [resultado] = await db.query(
+      `UPDATE itens SET concluido = ?, concluido_em = ${concluido ? 'NOW()' : 'NULL'}, concluido_por = ?
+        WHERE id = ? AND projeto_id = ?`,
+      [concluido, concluido ? req.usuario.usuario_id : null, itemId, acesso.projeto.id]
+    )
+    if (resultado.affectedRows === 0) {
+      return res.status(404).json({ mensagem: 'Item não encontrado.' })
+    }
+
+    registrarEvento({
+      usuario_id: req.usuario.usuario_id,
+      acao: concluido ? 'item_concluido' : 'item_reaberto',
+      ip_origem: req.ip,
+      detalhe: `projeto_id=${acesso.projeto.id} item_id=${itemId}`
+    })
+
+    res.json({ mensagem: concluido ? 'Item marcado como consumido na montagem.' : 'Consumo desfeito.' })
+  } catch (err) {
+    console.error(err)
+    res.status(500).json({ mensagem: 'Erro ao atualizar o item.' })
+  }
+})
+
 // ---------- DEMANDAS ----------
 
 router.post('/projetos/:id/demandas', exigirLogin, limitadorEscrita, async (req, res) => {
-  const atividade = req.body.atividade
+  const processo = req.body.processo
   const descricao = String(req.body.descricao || '').trim()
   const email = String(req.body.responsavel_email || '').trim().toLowerCase()
-  const processoId = req.body.processo_id ? Number(req.body.processo_id) : null
 
-  if (!ATIVIDADES.includes(atividade) || !descricao || descricao.length > 255) {
-    return res.status(400).json({ mensagem: 'Informe a atividade (montagem, almoxarifado ou usinagem) e a descrição.' })
+  if (!PROCESSOS.includes(processo) || !descricao || descricao.length > 255) {
+    return res.status(400).json({ mensagem: 'Escolha o processo (Planejamento, Almoxarifado, Fabricação ou Montagem) e informe a descrição.' })
   }
 
   try {
@@ -524,19 +543,22 @@ router.post('/projetos/:id/demandas', exigirLogin, limitadorEscrita, async (req,
 
     // responsável: por e-mail (para atribuir a outra pessoa) ou o próprio criador
     let responsavelId = req.usuario.usuario_id
+    let categoriaResponsavel = categoriaDe(req.usuario)
     if (email) {
-      const [usuarios] = await db.query('SELECT id FROM usuarios WHERE email = ?', [email])
+      const [usuarios] = await db.query('SELECT id, categoria FROM usuarios WHERE email = ?', [email])
       if (usuarios.length === 0) {
         return res.status(404).json({ mensagem: 'Não existe usuário com esse e-mail. Peça para a pessoa se cadastrar.' })
       }
       responsavelId = usuarios[0].id
+      categoriaResponsavel = usuarios[0].categoria || 'superior'
     }
 
-    if (processoId !== null) {
-      const [proc] = await db.query('SELECT id FROM processos WHERE id = ? AND criado_por = ?', [processoId, req.usuario.usuario_id])
-      if (proc.length === 0 && !ehAdmin(req)) {
-        return res.status(400).json({ mensagem: 'Processo inválido.' })
-      }
+    // hierarquia: cada processo é conduzido pela categoria correspondente; o Superior atua em qualquer um
+    const exigida = CATEGORIA_DO_PROCESSO[processo]
+    if (categoriaResponsavel !== 'superior' && categoriaResponsavel !== exigida) {
+      return res.status(409).json({
+        mensagem: `A categoria ${ROTULO_CATEGORIA[categoriaResponsavel] || categoriaResponsavel} não atua no processo de ${ROTULO_PROCESSO[processo]}. Atribua a alguém da categoria ${ROTULO_CATEGORIA[exigida]} ou a um Superior.`
+      })
     }
 
     const pode = await dentroDoLimite(req, res, 'demandas_abertas', async () => {
@@ -549,16 +571,16 @@ router.post('/projetos/:id/demandas', exigirLogin, limitadorEscrita, async (req,
     if (!pode) return
 
     const [resultado] = await db.query(
-      `INSERT INTO demandas (projeto_id, processo_id, atividade, descricao, responsavel_id, criado_por)
-       VALUES (?, ?, ?, ?, ?, ?)`,
-      [acesso.projeto.id, processoId, atividade, descricao, responsavelId, req.usuario.usuario_id]
+      `INSERT INTO demandas (projeto_id, atividade, descricao, responsavel_id, criado_por)
+       VALUES (?, ?, ?, ?, ?)`,
+      [acesso.projeto.id, processo, descricao, responsavelId, req.usuario.usuario_id]
     )
 
     registrarEvento({
       usuario_id: req.usuario.usuario_id,
       acao: 'demanda_criada',
       ip_origem: req.ip,
-      detalhe: `demanda_id=${resultado.insertId} projeto_id=${acesso.projeto.id} atividade=${atividade} responsavel_id=${responsavelId}`
+      detalhe: `demanda_id=${resultado.insertId} projeto_id=${acesso.projeto.id} processo=${processo} responsavel_id=${responsavelId}`
     })
 
     res.status(201).json({ id: resultado.insertId })
@@ -700,87 +722,95 @@ router.get('/indicadores', exigirLogin, exigirNivel('expert'), async (req, res) 
   }
 })
 
-// ---------- PREVISÃO DE EQUIPE (Expert/Admin, proxy pro serviço de regressão) ----------
-// Contrato do serviço de regressão (rede interna, chave interna):
-//   POST /prever  { usuario_id, n_itens, qtd_total, n_atividades, prazo_dias }
-//     -> { funcionarios_previstos, amostras, r2 }
-// O serviço treina com dados mockados + os projetos concluídos desse usuário
-// (tabela projetos, coluna funcionarios_usados).
+// ---------- ANÁLISE: previsão de equipe (Expert/Admin) ----------
+// O usuário envia um CSV com o histórico (nº de funcionários, itens concluídos no mês, horas),
+// escolhe as colunas e treina uma regressão linear múltipla no serviço "regressao". Depois informa
+// os valores planejados e recebe o número de funcionários previsto. O CSV é lido e validado pelo
+// serviço; aqui só autenticamos, limitamos o tamanho e repassamos.
 
-async function chamarRegressao(req, res, caracteristicas) {
+const ANALISE = '/analise/previsao-equipe'
+const uploadCsv = multer({ storage: multer.memoryStorage(), limits: { fileSize: 2 * 1024 * 1024 } })
+const soExpert = [exigirLogin, exigirNivel('expert')]
+
+async function chamarRegressao(metodo, caminho, corpo) {
   try {
-    const resposta = await fetch(`${REGRESSAO_URL}/prever`, {
-      method: 'POST',
+    const resposta = await fetch(`${REGRESSAO_URL}${caminho}`, {
+      method: metodo,
       headers: { 'Content-Type': 'application/json', 'x-internal-key': INTERNAL_API_KEY },
-      body: JSON.stringify({ usuario_id: req.usuario.usuario_id, ...caracteristicas })
+      body: corpo === undefined ? undefined : JSON.stringify(corpo),
+      signal: AbortSignal.timeout(60000)
     })
-    const dados = await resposta.json()
-
-    if (resposta.ok) {
-      registrarEvento({
-        usuario_id: req.usuario.usuario_id,
-        acao: 'previsao_consultada',
-        ip_origem: req.ip,
-        detalhe: `itens=${caracteristicas.n_itens} qtd=${caracteristicas.qtd_total} atividades=${caracteristicas.n_atividades} prazo=${caracteristicas.prazo_dias}`
-      })
-    }
-    res.status(resposta.status).json(dados)
+    const dados = await resposta.json().catch(() => ({}))
+    return { status: resposta.status, dados }
   } catch (err) {
     console.error(err)
-    res.status(502).json({ mensagem: 'Serviço de previsão indisponível.' })
+    return { status: 502, dados: { mensagem: 'Serviço de análise indisponível.' } }
   }
 }
 
-// simulação: o usuário informa as características de um projeto hipotético
-router.post('/previsao', exigirLogin, exigirNivel('expert'), limitadorEscrita, async (req, res) => {
-  const caracteristicas = {
-    n_itens: Number(req.body.n_itens),
-    qtd_total: Number(req.body.qtd_total),
-    n_atividades: Number(req.body.n_atividades),
-    prazo_dias: Number(req.body.prazo_dias)
+function exigirArquivo(req, res, next) {
+  if (!req.file) {
+    return res.status(400).json({ mensagem: 'Nenhum arquivo enviado. Escolha um arquivo CSV.' })
   }
-  const valido = Object.values(caracteristicas).every(v => Number.isFinite(v) && v > 0)
-  if (!valido || caracteristicas.n_atividades > ATIVIDADES.length) {
-    return res.status(400).json({ mensagem: 'Preencha todos os campos com números maiores que zero (atividades: de 1 a 3).' })
-  }
-  await chamarRegressao(req, res, caracteristicas)
+  next()
+}
+
+// 1) lê o CSV e devolve as colunas (com tipo e sugestão de papel) e as primeiras linhas
+router.post(`${ANALISE}/previa`, ...soExpert, limitadorEscrita, uploadCsv.single('arquivo'), exigirArquivo, async (req, res) => {
+  const r = await chamarRegressao('POST', '/csv/previa', { arquivo_base64: req.file.buffer.toString('base64') })
+  res.status(r.status).json(r.dados)
 })
 
-// previsão para um projeto já cadastrado: as características saem do próprio banco
-router.get('/previsao/projeto/:id', exigirLogin, exigirNivel('expert'), limitadorEscrita, async (req, res) => {
-  try {
-    const acesso = await carregarProjeto(req, res)
-    if (!acesso) return
-    if (!acesso.souDono) {
-      return res.status(403).json({ mensagem: 'Só quem criou o projeto pede a previsão dele.' })
-    }
-
-    const [[itens]] = await db.query(
-      'SELECT COUNT(*) AS n_itens, COALESCE(SUM(quantidade), 0) AS qtd_total FROM itens WHERE projeto_id = ?',
-      [acesso.projeto.id]
-    )
-    const [[atividades]] = await db.query(
-      'SELECT COUNT(DISTINCT atividade) AS n_atividades FROM demandas WHERE projeto_id = ?',
-      [acesso.projeto.id]
-    )
-
-    const caracteristicas = {
-      n_itens: Number(itens.n_itens),
-      qtd_total: Number(itens.qtd_total),
-      n_atividades: Number(atividades.n_atividades),
-      prazo_dias: Number(acesso.projeto.prazo_dias || 0)
-    }
-    if (Object.values(caracteristicas).some(v => v <= 0)) {
-      return res.status(422).json({
-        mensagem: 'Para prever, o projeto precisa ter itens, demandas (com atividade) e prazo em dias.',
-        caracteristicas
-      })
-    }
-    await chamarRegressao(req, res, caracteristicas)
-  } catch (err) {
-    console.error(err)
-    res.status(500).json({ mensagem: 'Erro ao preparar a previsão.' })
+// 2) treina o modelo com as colunas escolhidas e o guarda para o usuário
+router.post(`${ANALISE}/treinar`, ...soExpert, limitadorEscrita, uploadCsv.single('arquivo'), exigirArquivo, async (req, res) => {
+  let entradas = null
+  try { entradas = JSON.parse(req.body.entradas || '[]') } catch (err) { entradas = null }
+  if (typeof req.body.alvo !== 'string' || !Array.isArray(entradas)) {
+    return res.status(400).json({ mensagem: 'Informe a coluna alvo e as colunas de entrada.' })
   }
+
+  const r = await chamarRegressao('POST', '/treinar', {
+    usuario_id: req.usuario.usuario_id,
+    nome_arquivo: req.file.originalname,
+    arquivo_base64: req.file.buffer.toString('base64'),
+    alvo: req.body.alvo,
+    entradas
+  })
+  if (r.status === 200) {
+    registrarEvento({
+      usuario_id: req.usuario.usuario_id,
+      acao: 'modelo_treinado',
+      ip_origem: req.ip,
+      detalhe: `alvo=${req.body.alvo} entradas=${entradas.length} linhas=${r.dados.n_linhas}`
+    })
+  }
+  res.status(r.status).json(r.dados)
+})
+
+// 3) o modelo já treinado do usuário (404 se ele ainda não treinou nenhum)
+router.get(`${ANALISE}/modelo`, ...soExpert, async (req, res) => {
+  const r = await chamarRegressao('GET', `/modelo?usuario_id=${req.usuario.usuario_id}`)
+  res.status(r.status).json(r.dados)
+})
+
+// 4) previsão a partir dos valores planejados (ex.: itens a concluir no mês e horas planejadas)
+router.post(`${ANALISE}/prever`, ...soExpert, limitadorEscrita, async (req, res) => {
+  const r = await chamarRegressao('POST', '/prever', { usuario_id: req.usuario.usuario_id, valores: req.body.valores })
+  if (r.status === 200) {
+    registrarEvento({
+      usuario_id: req.usuario.usuario_id,
+      acao: 'previsao_consultada',
+      ip_origem: req.ip,
+      detalhe: `funcionarios=${r.dados.funcionarios}`
+    })
+  }
+  res.status(r.status).json(r.dados)
+})
+
+// 5) descarta o modelo
+router.delete(`${ANALISE}/modelo`, ...soExpert, limitadorEscrita, async (req, res) => {
+  const r = await chamarRegressao('DELETE', `/modelo?usuario_id=${req.usuario.usuario_id}`)
+  res.status(r.status).json(r.dados)
 })
 
 // ---------- ASSINATURA (proxy pro serviço de pagamentos) ----------
@@ -948,7 +978,7 @@ router.get('/perfil/:usuario_id/foto', exigirLogin, async (req, res) => {
 // erro do multer (arquivo maior que o permitido) -- precisa vir depois das rotas de upload
 router.use((err, req, res, next) => {
   if (err && err.code === 'LIMIT_FILE_SIZE') {
-    return res.status(413).json({ mensagem: `Arquivo muito grande. Máximo: ${TAMANHO_MAXIMO_MB}MB.` })
+    return res.status(413).json({ mensagem: `Arquivo muito grande. Fotos: até ${TAMANHO_MAXIMO_MB} MB; planilhas CSV: até 2 MB.` })
   }
   next(err)
 })

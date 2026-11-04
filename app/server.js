@@ -56,7 +56,7 @@ app.get('/', (req, res) => {
 })
 
 // páginas que exigem login: sem cookie válido, vai para o login
-for (const pagina of ['inicio.html', 'projetos.html', 'projeto.html', 'demandas.html', 'previsao.html', 'planos.html', 'perfil.html']) {
+for (const pagina of ['inicio.html', 'projetos.html', 'projeto.html', 'demandas.html', 'analise.html', 'planos.html', 'perfil.html']) {
   app.get(`/${pagina}`, exigirLogin, (req, res) => {
     res.sendFile(path.join(__dirname, 'public', pagina))
   })
