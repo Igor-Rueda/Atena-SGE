@@ -4,7 +4,6 @@ const id = Number(new URLSearchParams(window.location.search).get('id'));
 
 let estado = null; // { projeto, sou_dono, itens, demandas }
 
-const ROTULO_ATIVIDADE = { montagem: 'Montagem', almoxarifado: 'Almoxarifado', usinagem: 'Usinagem' };
 const ROTULO_STATUS = { aberta: 'Aberta', em_andamento: 'Em andamento', concluida: 'Concluída' };
 
 function naoEncontrado() {
@@ -45,14 +44,28 @@ function renderizarTopo() {
   document.getElementById('d-criado').textContent = Atenas.formatarData(p.criado_em);
   document.getElementById('d-itens').textContent = estado.itens.length;
   document.getElementById('d-unidades').textContent = unidades;
+  const consumidas = estado.itens.reduce(function (soma, i) { return soma + (i.concluido ? Number(i.quantidade) : 0); }, 0);
+  document.getElementById('d-consumidas').textContent = consumidas + ' de ' + unidades;
   document.getElementById('d-demandas').textContent = estado.demandas.length;
   document.getElementById('d-equipe').textContent = p.funcionarios_usados ? p.funcionarios_usados : '—';
 
   document.getElementById('btn-concluir').hidden = !(estado.sou_dono && ativo);
-  document.getElementById('btn-prever').hidden = !(estado.sou_dono && ativo);
 }
 
 // ---------- itens (RGs) ----------
+// um item é concluído quando é consumido na montagem: quem registra é o Montador (ou o dono do projeto)
+function podeRegistrarConsumo() {
+  return estado.sou_dono || (Atenas.me && Atenas.me.categoria === 'montador');
+}
+
+async function alternarConsumo(item, botao) {
+  botao.disabled = true;
+  const r = await Atenas.api('/api/projetos/' + id + '/itens/' + item.id + '/concluir', {
+    method: 'PATCH', body: JSON.stringify({ concluido: !item.concluido }),
+  });
+  if (r.ok) { Atenas.aviso(r.dados.mensagem, 'sucesso'); carregar(); } else { botao.disabled = false; }
+}
+
 function renderizarItens() {
   const termo = document.getElementById('busca-itens').value.trim().toLowerCase();
   const itens = estado.itens.filter(function (i) {
@@ -64,7 +77,17 @@ function renderizarItens() {
   itens.forEach(function (i) {
     const linha = el('tr');
     const rg = el('td'); rg.appendChild(el('span', i.rg, 'codigo'));
-    linha.append(rg, el('td', i.nome), el('td', String(i.quantidade), 'num'));
+    const situacao = el('td');
+    situacao.appendChild(el('span', i.concluido ? 'Consumido' : 'Pendente', 'etiqueta ' + (i.concluido ? 'etiqueta--concluido' : 'etiqueta--ativo')));
+    if (i.concluido && i.concluido_em) situacao.appendChild(el('small', ' ' + Atenas.formatarData(i.concluido_em), 'texto-suave'));
+    const acao = el('td', undefined, 'num');
+    if (podeRegistrarConsumo()) {
+      const botao = el('button', i.concluido ? 'Desfazer' : 'Marcar como consumido', 'botao botao--secundario botao--pequeno');
+      botao.type = 'button';
+      botao.addEventListener('click', function () { alternarConsumo(i, botao); });
+      acao.appendChild(botao);
+    }
+    linha.append(rg, el('td', i.nome), el('td', String(i.quantidade), 'num'), situacao, acao);
     corpo.appendChild(linha);
   });
 
@@ -80,7 +103,7 @@ function renderizarItens() {
 // ---------- demandas ----------
 function linhaDemanda(d) {
   const linha = el('div', undefined, 'demanda');
-  linha.appendChild(el('span', ROTULO_ATIVIDADE[d.atividade] || d.atividade, 'etiqueta'));
+  linha.appendChild(el('span', Atenas.rotuloProcesso(d.atividade), 'etiqueta'));
 
   const info = el('div', undefined, 'demanda__info');
   info.appendChild(el('strong', d.descricao));
@@ -177,7 +200,7 @@ formDemanda.addEventListener('submit', async function (evento) {
   const r = await Atenas.api('/api/projetos/' + id + '/demandas', {
     method: 'POST',
     body: JSON.stringify({
-      atividade: document.getElementById('demanda-atividade').value,
+      processo: document.getElementById('demanda-processo').value,
       descricao: document.getElementById('demanda-descricao').value,
       responsavel_email: document.getElementById('demanda-email').value,
     }),
@@ -206,15 +229,14 @@ document.getElementById('btn-concluir').addEventListener('click', async function
   if (r.ok) { Atenas.aviso('Projeto concluído.', 'sucesso'); carregar(); }
 });
 
-document.getElementById('btn-prever').addEventListener('click', function (evento) {
-  if (!Atenas.ehExpert()) {
-    evento.preventDefault();
-    Atenas.abrirModalUpgrade('A previsão de equipe é um recurso do plano Expert.');
-  }
-});
-
 Atenas.pronto.then(function () {
   if (!Number.isInteger(id) || id <= 0) return naoEncontrado();
-  document.getElementById('btn-prever').href = 'previsao.html?projeto=' + id;
+  // processos em ordem de fluxo: Planejamento, Almoxarifado, Fabricação e Montagem
+  const seletor = document.getElementById('demanda-processo');
+  Atenas.PROCESSOS.forEach(function (processo) {
+    const opcao = el('option', processo.rotulo);
+    opcao.value = processo.valor;
+    seletor.appendChild(opcao);
+  });
   carregar();
 });

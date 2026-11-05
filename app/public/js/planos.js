@@ -14,7 +14,7 @@ const PLANOS = [
     descricao: 'Para organizar o registro e acompanhar as suas demandas.',
     recursos: ['Cadastrar processos, itens e projetos', 'Ver as suas próprias demandas', 'Perfil com foto e bio'],
     limites: ['Até 3 projetos ativos', 'Até 50 itens por projeto', 'Até 20 demandas abertas',
-      'Não exclui demandas', 'Sem painel de indicadores', 'Sem previsão de equipe'],
+      'Não exclui demandas', 'Sem painel de indicadores', 'Sem análise (previsão de equipe)'],
   },
   {
     role: 'expert',
@@ -23,7 +23,7 @@ const PLANOS = [
     periodo: '/mês',
     descricao: 'Para decidir quantas pessoas alocar e evitar a sobrecarga da equipe.',
     recursos: ['Tudo do plano Professional, sem limites de uso', 'Painel de indicadores e carga por funcionário',
-      'Previsão de equipe (regressão linear múltipla)', 'Excluir demandas'],
+      'Análise: previsão de equipe treinada com o seu histórico (CSV)', 'Excluir demandas'],
     limites: [],
     destaque: true,
   },

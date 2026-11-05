@@ -8,7 +8,8 @@ form.addEventListener('submit', async (evento) => {
   const dados = {
     nome: document.getElementById('nome').value,
     email: document.getElementById('email').value,
-    senha: document.getElementById('senha').value
+    senha: document.getElementById('senha').value,
+    categoria: document.getElementById('categoria').value
   }
 
   try {

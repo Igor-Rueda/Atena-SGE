@@ -10,7 +10,7 @@ function cartaoDoPlano(role) {
   const lista = el('ul', undefined, 'lista-check');
   const itens = expert
     ? ['Projetos, itens e demandas sem limite', 'Painel de indicadores e carga por funcionário',
-       'Previsão de equipe com regressão linear múltipla', 'Exclusão de demandas']
+       'Análise: previsão de equipe treinada com o seu histórico (CSV)', 'Exclusão de demandas']
     : ['Até 3 projetos ativos ao mesmo tempo', 'Até 50 itens por projeto', 'Até 20 demandas abertas',
        'Cadastro e acompanhamento das suas demandas'];
   itens.forEach(function (t) { lista.appendChild(el('li', t)); });

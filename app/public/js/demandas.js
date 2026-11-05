@@ -3,7 +3,6 @@ const el = Atenas.el;
 const lista = document.getElementById('lista-demandas');
 const vazio = document.getElementById('vazio');
 
-const ROTULO_ATIVIDADE = { montagem: 'Montagem', almoxarifado: 'Almoxarifado', usinagem: 'Usinagem' };
 const ROTULO_STATUS = { aberta: 'Aberta', em_andamento: 'Em andamento', concluida: 'Concluída' };
 
 let todas = [];
@@ -17,7 +16,7 @@ function visivel(d) {
 
 function linha(d) {
   const item = el('div', undefined, 'demanda');
-  item.appendChild(el('span', ROTULO_ATIVIDADE[d.atividade] || d.atividade, 'etiqueta'));
+  item.appendChild(el('span', Atenas.rotuloProcesso(d.atividade), 'etiqueta'));
 
   const info = el('div', undefined, 'demanda__info');
   info.appendChild(el('strong', d.descricao));

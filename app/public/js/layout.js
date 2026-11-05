@@ -62,6 +62,22 @@
   const ROTULO_PAPEL = { professional: 'Professional', expert: 'Expert', admin: 'Admin' };
   function rotuloPapel(role) { return ROTULO_PAPEL[role] || role; }
 
+  // categoria do usuário (hierarquia: o Superior está acima; as outras quatro atuam nos processos, no mesmo nível)
+  const ROTULO_CATEGORIA = { superior: 'Superior', planejador: 'Planejador', almoxarife: 'Almoxarife', operador: 'Operador', montador: 'Montador' };
+  function rotuloCategoria(categoria) { return ROTULO_CATEGORIA[categoria] || ROTULO_CATEGORIA.superior; }
+
+  // processos, na ordem do fluxo: Planejamento > Almoxarifado > Fabricação > Montagem
+  const PROCESSOS = [
+    { valor: 'planejamento', rotulo: 'Planejamento' },
+    { valor: 'almoxarifado', rotulo: 'Almoxarifado' },
+    { valor: 'fabricacao', rotulo: 'Fabricação' },
+    { valor: 'montagem', rotulo: 'Montagem' },
+  ];
+  function rotuloProcesso(valor) {
+    const achado = PROCESSOS.find(function (p) { return p.valor === valor; });
+    return achado ? achado.rotulo : valor;
+  }
+
   function formatarData(iso) {
     if (!iso) return '—';
     const d = new Date(iso);
@@ -154,7 +170,8 @@
     const config = Object.assign({}, opcoes);
     const silencioso = config.silencioso;
     delete config.silencioso;
-    config.headers = Object.assign({ 'Content-Type': 'application/json' }, config.headers);
+    const ehFormData = typeof FormData !== 'undefined' && config.body instanceof FormData;
+    config.headers = Object.assign(ehFormData ? {} : { 'Content-Type': 'application/json' }, config.headers);
 
     let resposta;
     try {
@@ -181,7 +198,7 @@
     { titulo: 'Operação' },
     { id: 'projetos', rotulo: 'Projetos', href: 'projetos.html', icone: 'pasta' },
     { id: 'demandas', rotulo: 'Minhas demandas', href: 'demandas.html', icone: 'lista' },
-    { id: 'previsao', rotulo: 'Previsão de equipe', href: 'previsao.html', icone: 'grafico', expert: true },
+    { id: 'analise', rotulo: 'Análise', href: 'analise.html', icone: 'grafico', expert: true },
     { titulo: 'Conta' },
     { id: 'planos', rotulo: 'Planos', href: 'planos.html', icone: 'estrela' },
     { id: 'perfil', rotulo: 'Perfil', href: 'perfil.html', icone: 'usuario' },
@@ -189,6 +206,7 @@
 
   const Atenas = { icone: icone, hidratarIcones: hidratarIcones, el: el, aviso: aviso, modal: modal,
     abrirModalUpgrade: abrirModalUpgrade, api: api, rotuloPapel: rotuloPapel, formatarData: formatarData,
+    rotuloCategoria: rotuloCategoria, rotuloProcesso: rotuloProcesso, PROCESSOS: PROCESSOS,
     me: null, ehExpert: function () { return !!Atenas.me && (Atenas.me.role === 'expert' || Atenas.me.role === 'admin'); } };
   window.Atenas = Atenas;
 
@@ -236,9 +254,11 @@
     const dados = el('div', undefined, 'usuario__dados');
     const nome = el('strong', '');
     nome.id = 'usuario-nome';
+    const categoria = el('span', '', 'usuario__categoria');
+    categoria.id = 'usuario-categoria';
     const papel = el('span', '', 'etiqueta');
     papel.id = 'usuario-papel';
-    dados.append(nome, papel);
+    dados.append(nome, categoria, papel);
     usuario.append(avatar, dados);
     const sair = el('button', undefined, 'botao botao--fantasma botao--bloco');
     sair.type = 'button';
@@ -286,6 +306,8 @@
     const papelEl = document.getElementById('usuario-papel');
     if (avatar) avatar.textContent = iniciais;
     if (nomeEl) nomeEl.textContent = nome || 'Usuário';
+    const categoriaEl = document.getElementById('usuario-categoria');
+    if (categoriaEl) categoriaEl.textContent = rotuloCategoria(me.categoria);
     if (papelEl) {
       papelEl.textContent = rotuloPapel(me.role);
       if (me.role === 'expert' || me.role === 'admin') papelEl.classList.add('etiqueta--expert');
