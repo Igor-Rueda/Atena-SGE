@@ -1,9 +1,10 @@
 """Teste de fumaça HTTP, rodado DENTRO do container (no CI: docker compose exec regressao ...).
 
 O serviço não publica porta, então a chamada é feita para localhost, de dentro dele, com a
-INTERNAL_API_KEY do ambiente. Confere: sem chave = 403, entrada inválida = 400 e uma
-previsão válida devolve um número.
+INTERNAL_API_KEY do ambiente. Confere: sem chave = 403, prévia de um CSV pequeno = 200 e
+um usuário sem modelo = 404. Não grava nada no banco.
 """
+import base64
 import json
 import os
 import sys
@@ -11,16 +12,17 @@ import urllib.error
 import urllib.request
 
 PORTA = os.environ.get('PORT_REGRESSAO', '6000')
-URL = f'http://localhost:{PORTA}/prever'
+BASE = f'http://localhost:{PORTA}'
 CHAVE = os.environ.get('INTERNAL_API_KEY', '')
-CORPO = {'usuario_id': 1, 'n_itens': 20, 'qtd_total': 100, 'n_atividades': 2, 'prazo_dias': 30}
+CSV = 'mes;funcionarios;itens;horas\n2024-01;5;100;800,5\n2024-02;6;120;900\n2024-03;7;140;1000,5\n'
 
 
-def chamar(corpo, com_chave=True):
+def chamar(metodo, caminho, corpo=None, com_chave=True):
     cabecalhos = {'Content-Type': 'application/json'}
     if com_chave:
         cabecalhos['x-internal-key'] = CHAVE
-    pedido = urllib.request.Request(URL, data=json.dumps(corpo).encode(), headers=cabecalhos, method='POST')
+    dados = json.dumps(corpo).encode() if corpo is not None else None
+    pedido = urllib.request.Request(BASE + caminho, data=dados, headers=cabecalhos, method=metodo)
     try:
         with urllib.request.urlopen(pedido, timeout=10) as resposta:
             return resposta.status, json.loads(resposta.read())
@@ -38,14 +40,18 @@ if not CHAVE:
     print('FALHOU INTERNAL_API_KEY ausente do ambiente do container')
     sys.exit(1)
 
-status, _ = chamar(CORPO, com_chave=False)
+status, _ = chamar('GET', '/health', com_chave=False)
+exigir(status == 200, 'health responde 200')
+
+status, _ = chamar('POST', '/csv/previa', {'arquivo_base64': ''}, com_chave=False)
 exigir(status == 403, 'sem chave interna -> 403')
 
-status, _ = chamar({**CORPO, 'n_itens': 0})
-exigir(status == 400, 'entrada inválida -> 400')
+arquivo = base64.b64encode(CSV.encode()).decode()
+status, corpo = chamar('POST', '/csv/previa', {'arquivo_base64': arquivo})
+exigir(status == 200, 'prévia de um CSV pequeno -> 200')
+exigir([c['nome'] for c in corpo['colunas']] == ['mes', 'funcionarios', 'itens', 'horas'], 'colunas lidas na ordem do arquivo')
+exigir(corpo['colunas'][1]['sugestao'] == 'alvo', 'coluna "funcionarios" sugerida como alvo')
 
-status, corpo = chamar(CORPO)
-exigir(status == 200, 'previsão válida -> 200')
-exigir(isinstance(corpo.get('funcionarios_previstos'), (int, float)), 'devolve funcionarios_previstos numérico')
-exigir(corpo['funcionarios_previstos'] >= 1, 'previsão >= 1 funcionário')
-print('Regressão OK:', corpo)
+status, _ = chamar('GET', '/modelo?usuario_id=999999')
+exigir(status == 404, 'usuário sem modelo -> 404')
+print('Regressão OK')
