@@ -10,34 +10,22 @@
   <link rel="stylesheet" href="css/auth.css">
 </head>
 <body>
-  <div class="auth">
-    <aside class="auth__marca">
+  <main class="auth-unico">
+    <div class="cartao auth__cartao">
       <img class="auth__logo" src="assets/logo.png" alt="Atenas SGE" onerror="this.style.display='none'">
-      <h2>Atenas SGE</h2>
-      <p>Software de Gestão Empresarial para operações que precisam de clareza no chão de fábrica.</p>
-      <ul class="auth__lista">
-        <li>Projetos, itens e demandas num só lugar</li>
-        <li>Cada pessoa vê só o que precisa para trabalhar</li>
-        <li>Previsão de equipe com base no seu histórico</li>
-      </ul>
-    </aside>
-    <main class="auth__painel">
-      <div class="cartao auth__cartao">
-        <img class="auth__logo-mobile" src="assets/logo.png" alt="Atenas SGE" onerror="this.style.display='none'">
-        <h1>Esqueci minha senha</h1>
-        <p class="texto-suave">Informe seu e-mail e enviaremos um link para redefinir a senha.</p>
+      <h1>Esqueci minha senha</h1>
+      <p class="texto-suave">Informe seu e-mail e enviaremos um link para redefinir a senha.</p>
 
-        <form id="form-esqueci-senha">
-          <div class="campo"><label for="email">E-mail</label><input type="email" id="email" name="email" required autocomplete="email"></div>
-          <button type="submit" class="botao botao--bloco">Enviar link de redefinição</button>
-        </form>
+      <form id="form-esqueci-senha">
+        <div class="campo"><label for="email">E-mail</label><input type="email" id="email" name="email" required autocomplete="email"></div>
+        <button type="submit" class="botao botao--bloco">Enviar link de redefinição</button>
+      </form>
 
-        <p id="mensagem-status" class="aviso aviso--info" hidden></p>
+      <p id="mensagem-status" class="aviso aviso--info" hidden></p>
 
-        <p class="auth__links"><a href="login.html">Voltar para o login</a></p>
-      </div>
-    </main>
-  </div>
+      <p class="auth__links"><a href="login.html">Voltar para o login</a></p>
+    </div>
+  </main>
 
   <script src="js/esqueci-senha.js"></script>
 </body>

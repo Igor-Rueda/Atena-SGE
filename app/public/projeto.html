@@ -35,7 +35,6 @@
             <p class="texto-suave sem-margem" id="p-descricao"></p>
           </div>
           <div class="projeto-topo__acoes">
-            <a class="botao botao--secundario" id="btn-prever" href="previsao.html" hidden><span data-icone="grafico" data-tamanho="18"></span>Prever equipe</a>
             <button class="botao" id="btn-concluir" type="button" hidden><span data-icone="check" data-tamanho="18"></span>Concluir projeto</button>
           </div>
         </div>
@@ -44,6 +43,7 @@
           <div><dt>Criado em</dt><dd id="d-criado">–</dd></div>
           <div><dt>Itens</dt><dd id="d-itens">–</dd></div>
           <div><dt>Unidades</dt><dd id="d-unidades">–</dd></div>
+          <div><dt>Consumidas</dt><dd id="d-consumidas">–</dd></div>
           <div><dt>Demandas</dt><dd id="d-demandas">–</dd></div>
           <div><dt>Equipe real</dt><dd id="d-equipe">—</dd></div>
         </dl>
@@ -74,7 +74,7 @@
 
         <div class="tabela-rolagem" id="tabela-itens" hidden>
           <table class="tabela">
-            <thead><tr><th scope="col">RG</th><th scope="col">Item</th><th scope="col" class="num">Quantidade</th></tr></thead>
+            <thead><tr><th scope="col">RG</th><th scope="col">Item</th><th scope="col" class="num">Quantidade</th><th scope="col">Situação</th><th scope="col"><span class="sr-only">Ação</span></th></tr></thead>
             <tbody id="tbody-itens"></tbody>
           </table>
         </div>
@@ -82,7 +82,7 @@
         <div id="vazio-itens" class="estado-vazio" hidden>
           <span class="icone-caixa"><span data-icone="caixa"></span></span>
           <h3>Nenhum item cadastrado</h3>
-          <p>Os itens (RG, nome e quantidade) aparecem aqui, em ordem de cadastro.</p>
+          <p>Os itens (RG, nome e quantidade) aparecem aqui, em ordem de cadastro. Um item é concluído quando é consumido na montagem.</p>
         </div>
       </section>
 
@@ -96,12 +96,8 @@
         <form id="form-demanda" class="form-inline" hidden>
           <div class="form-grade">
             <div class="campo">
-              <label for="demanda-atividade">Atividade</label>
-              <select id="demanda-atividade" required>
-                <option value="montagem">Montagem</option>
-                <option value="almoxarifado">Almoxarifado</option>
-                <option value="usinagem">Usinagem</option>
-              </select>
+              <label for="demanda-processo">Processo</label>
+              <select id="demanda-processo" required></select>
             </div>
             <div class="campo"><label for="demanda-descricao">Descrição</label><input type="text" id="demanda-descricao" required maxlength="255"></div>
             <div class="campo"><label for="demanda-email">E-mail do responsável</label><input type="email" id="demanda-email" placeholder="Vazio = você"></div>
