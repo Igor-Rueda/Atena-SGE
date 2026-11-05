@@ -31,6 +31,7 @@
 .menu__rodape { display: flex; flex-direction: column; gap: 0.75rem; padding-top: 1rem; border-top: 1px solid var(--cor-borda-suave); }
 .usuario { display: flex; align-items: center; gap: 0.7rem; min-width: 0; }
 .usuario__dados { min-width: 0; display: flex; flex-direction: column; gap: 0.15rem; align-items: flex-start; }
+.usuario__categoria { font-size: 0.78rem; color: var(--cor-texto-suave); }
 .usuario__dados strong { max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.9rem; }
 
 /* ---------- área principal ---------- */
