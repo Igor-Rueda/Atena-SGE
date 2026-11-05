@@ -78,7 +78,7 @@ router.post('/usuarios/:id/token', async (req, res) => {
   }
 
   try {
-    const [linhas] = await db.query('SELECT id, nome, role FROM usuarios WHERE id = ?', [usuarioId])
+    const [linhas] = await db.query('SELECT id, nome, role, categoria FROM usuarios WHERE id = ?', [usuarioId])
     const usuario = linhas[0]
 
     if (!usuario) {
@@ -86,7 +86,7 @@ router.post('/usuarios/:id/token', async (req, res) => {
     }
 
     const token = jwt.sign(
-      { usuario_id: usuario.id, nome: usuario.nome, role: usuario.role },
+      { usuario_id: usuario.id, nome: usuario.nome, role: usuario.role, categoria: usuario.categoria || 'superior' },
       process.env.JWT_SECRET,
       { expiresIn: '15m' }
     )

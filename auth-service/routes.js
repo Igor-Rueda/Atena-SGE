@@ -9,6 +9,10 @@ const { registrarEvento } = require('./logClient') // LOG: helper de auditoria
 
 const router = express.Router()
 
+// Categoria do usuário. O Superior está no topo da hierarquia; as outras quatro atuam em um
+// processo (Planejamento, Almoxarifado, Fabricação, Montagem) e ficam no mesmo nível.
+const CATEGORIAS = ['superior', 'planejador', 'almoxarife', 'operador', 'montador']
+
 function emailValido(email) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
 }
@@ -33,6 +37,7 @@ const limitadorSensivel = rateLimit({
 // ---------- CADASTRO ----------
 router.post('/cadastro', async (req, res) => {
   const { nome, email, senha } = req.body
+  const categoria = req.body.categoria || 'superior'
 
   if (!nome || !email || !senha) {
     return res.status(400).json({ mensagem: 'Preencha nome, e-mail e senha.' })
@@ -43,14 +48,17 @@ router.post('/cadastro', async (req, res) => {
   if (senha.length < 6) {
     return res.status(400).json({ mensagem: 'A senha precisa ter pelo menos 6 caracteres.' })
   }
+  if (!CATEGORIAS.includes(categoria)) {
+    return res.status(400).json({ mensagem: 'Categoria inválida.' })
+  }
 
   try {
     const senhaHash = await bcrypt.hash(senha, 10)
 
     // todo usuário novo nasce no papel mais baixo da hierarquia (professional < expert < admin)
     await db.query(
-      'INSERT INTO usuarios (nome, email, senha_hash, role) VALUES (?, ?, ?, ?)',
-      [nome, email, senhaHash, 'professional']
+      'INSERT INTO usuarios (nome, email, senha_hash, role, categoria) VALUES (?, ?, ?, ?, ?)',
+      [nome, email, senhaHash, 'professional', categoria]
     )
 
     res.status(201).json({ mensagem: 'Conta criada com sucesso.' })
@@ -87,7 +95,7 @@ router.post('/login', limitadorSensivel, async (req, res) => {
     }
 
     const token = jwt.sign(
-      { usuario_id: usuario.id,nome: usuario.nome, role: usuario.role },
+      { usuario_id: usuario.id, nome: usuario.nome, role: usuario.role, categoria: usuario.categoria || 'superior' },
       process.env.JWT_SECRET,
       { expiresIn: '15m' } //Expira em 15 minutos
     )
