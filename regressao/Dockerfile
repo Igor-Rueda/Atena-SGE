@@ -11,6 +11,6 @@ COPY . .
 # o serviço não precisa de root
 USER nobody
 
-EXPOSE 6000
+EXPOSE 6001
 
-CMD ["sh", "-c", "gunicorn --bind 0.0.0.0:${PORT_REGRESSAO:-6000} --workers 2 app:app"]
+CMD ["sh", "-c", "gunicorn --bind 0.0.0.0:${PORT_REGRESSAO:-6001} --workers 2 app:app"]

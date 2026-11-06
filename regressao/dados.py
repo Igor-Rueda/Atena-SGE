@@ -8,8 +8,10 @@ RECURSO = 'previsao_equipe'
 
 
 def _conectar():
+    porta = int(os.environ.get('DB_PORT', 3306))
     return pymysql.connect(
         host=os.environ.get('DB_HOST'),
+        port=porta,
         user=os.environ.get('DB_USER'),
         password=os.environ.get('DB_PASSWORD'),
         database=os.environ.get('DB_NAME'),

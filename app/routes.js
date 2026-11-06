@@ -8,11 +8,11 @@ const { registrarEvento } = require('./logClient') // LOG: helper de auditoria
 
 const router = express.Router()
 
-const AUTH_URL = process.env.AUTH_SERVICE_URL
-const LOG_URL = process.env.LOG_SERVICE_URL // LOG: usado só na rota de consulta (proxy)
-const PROFILE_URL = process.env.PROFILE_SERVICE_URL // PERFIL: profile-service (rede interna)
-const PAGAMENTOS_URL = process.env.PAGAMENTOS_SERVICE_URL // PAGAMENTOS: pagamentos (rede interna)
-const REGRESSAO_URL = process.env.REGRESSAO_SERVICE_URL // REGRESSÃO: previsão de equipe (rede interna)
+const AUTH_URL = process.env.AUTH_SERVICE_URL || 'http://auth-service:4000'
+const LOG_URL = process.env.LOG_SERVICE_URL || 'http://log-service:5000' // LOG: usado só na rota de consulta (proxy)
+const PROFILE_URL = process.env.PROFILE_SERVICE_URL || 'http://profile-service:4100' // PERFIL: profile-service (rede interna)
+const PAGAMENTOS_URL = process.env.PAGAMENTOS_SERVICE_URL || 'http://pagamentos:4200' // PAGAMENTOS: pagamentos (rede interna)
+const REGRESSAO_URL = process.env.REGRESSAO_SERVICE_URL || 'http://regressao:6000' // REGRESSÃO: previsão de equipe (rede interna)
 const INTERNAL_API_KEY = process.env.INTERNAL_API_KEY // segredo das rotas internas
 const TAMANHO_MAXIMO_MB = Number(process.env.PROFILE_IMAGE_MAX_SIZE_MB || 5)
 
@@ -743,8 +743,8 @@ async function chamarRegressao(metodo, caminho, corpo) {
     const dados = await resposta.json().catch(() => ({}))
     return { status: resposta.status, dados }
   } catch (err) {
-    console.error(err)
-    return { status: 502, dados: { mensagem: 'Serviço de análise indisponível.' } }
+    console.error('Falha ao comunicar com o serviço de regressão:', err.message)
+    return { status: 503, dados: { mensagem: `Serviço de análise temporariamente indisponível (${err.message}).` } }
   }
 }
 

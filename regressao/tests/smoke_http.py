@@ -11,7 +11,7 @@ import sys
 import urllib.error
 import urllib.request
 
-PORTA = os.environ.get('PORT_REGRESSAO', '6000')
+PORTA = os.environ.get('PORT_REGRESSAO', '6001')
 BASE = f'http://localhost:{PORTA}'
 CHAVE = os.environ.get('INTERNAL_API_KEY', '')
 CSV = 'mes;funcionarios;itens;horas\n2024-01;5;100;800,5\n2024-02;6;120;900\n2024-03;7;140;1000,5\n'
