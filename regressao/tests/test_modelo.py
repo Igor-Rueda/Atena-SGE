@@ -108,8 +108,8 @@ class TesteModelo(unittest.TestCase):
 
     def test_previsao_arredonda_para_cima_e_avisa_fora_da_faixa(self):
         resultado = self._treinar()
-        dentro = modelo.prever(resultado, {'itens_concluidos': 150, 'horas_totais': 1000})
-        esperado = 1 + 0.02 * 150 + 0.003 * 1000
+        dentro = modelo.prever(resultado, {'itens_concluidos': 155, 'horas_totais': 1000})
+        esperado = 1 + 0.02 * 155 + 0.003 * 1000
         self.assertAlmostEqual(dentro['previsto'], esperado, places=2)
         self.assertEqual(dentro['funcionarios'], int(esperado) + 1)
         self.assertEqual(dentro['fora_da_faixa'], [])
