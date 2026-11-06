@@ -5,3 +5,5 @@ garage.toml
 Typst
 venv
 *-analise
+*__pycache__
+dados.csv
