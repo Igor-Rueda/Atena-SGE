@@ -51,8 +51,10 @@ function exigirLogin(req, res, next) {
   }
 }
 
+// raiz: quem está logado vai para o painel; os demais veem a landing page pública
 app.get('/', (req, res) => {
-  res.redirect(req.cookies.token ? '/inicio.html' : '/login.html')
+  if (req.cookies.token) return res.redirect('/inicio.html')
+  res.sendFile(path.join(__dirname, 'public', 'landing.html'))
 })
 
 // páginas que exigem login: sem cookie válido, vai para o login

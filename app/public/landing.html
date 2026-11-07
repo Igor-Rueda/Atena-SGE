@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Atenas SGE — Gestão de demandas para o chão de fábrica</title>
+  <meta name="description" content="Projetos, itens e demandas dos processos de Planejamento, Almoxarifado, Fabricação e Montagem num só lugar, com previsão de equipe treinada no seu próprio histórico.">
+  <meta property="og:title" content="Atenas SGE — Software de Gestão Empresarial">
+  <meta property="og:description" content="Gestão de demandas para pequenas indústrias, sem a complexidade de um ERP.">
+  <meta property="og:type" content="website">
+  <link rel="stylesheet" href="css/tokens.css">
+  <link rel="stylesheet" href="css/base.css">
+  <link rel="stylesheet" href="css/componentes.css">
+  <link rel="stylesheet" href="landing.css">
+</head>
+<body class="landing">
+  <!-- ícones reutilizados na página -->
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+    <symbol id="i-pasta" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></symbol>
+    <symbol id="i-caixa" viewBox="0 0 24 24"><path d="M21 8 12 3 3 8v8l9 5 9-5z"/><path d="m3 8 9 5 9-5M12 13v8"/></symbol>
+    <symbol id="i-lista" viewBox="0 0 24 24"><rect x="6" y="4" width="12" height="17" rx="2"/><path d="M9 4V3h6v1M9.5 10h5M9.5 14h5"/></symbol>
+    <symbol id="i-grafico" viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></symbol>
+    <symbol id="i-usuario" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.6-7 8-7s8 3 8 7"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12.5 4.5 4.5L19 7.5"/></symbol>
+    <symbol id="i-seta" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></symbol>
+    <symbol id="i-relogio" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
+  </svg>
+
+  <a class="pular" href="#conteudo">Ir para o conteúdo</a>
+
+  <header class="topo-site">
+    <div class="container topo-site__interno">
+      <a class="marca" href="/" aria-label="Atenas SGE, página inicial">
+        <img src="assets/logo.png" alt="" onerror="this.style.display='none'">
+        <strong>Atenas SGE</strong>
+      </a>
+      <nav class="nav-site" aria-label="Seções da página">
+        <a href="#como-funciona">Como funciona</a>
+        <a href="#recursos">Recursos</a>
+        <a href="#previsao">Previsão de equipe</a>
+        <a href="#planos">Planos</a>
+      </nav>
+      <div class="topo-site__acoes">
+        <a class="botao botao--secundario botao--pequeno" href="login.html">Entrar</a>
+        <a class="botao botao--pequeno" href="cadastro.html">Criar conta</a>
+      </div>
+    </div>
+  </header>
+
+  <main id="conteudo">
+    <!-- ================= HERO ================= -->
+    <section class="hero-site">
+      <div class="container hero-site__grade">
+        <div>
+          <span class="selo">Software de Gestão Empresarial</span>
+          <h1>Gestão de demandas para o chão de fábrica, sem a complexidade de um ERP.</h1>
+          <p class="hero-site__texto">Projetos, itens e demandas de Planejamento, Almoxarifado, Fabricação e Montagem num só lugar. Cada pessoa vê só o que precisa, e a previsão de equipe aprende com o seu próprio histórico.</p>
+          <div class="hero-site__acoes">
+            <a class="botao botao--grande" href="cadastro.html">Criar conta grátis</a>
+            <a class="botao botao--grande botao--secundario" href="login.html">Já tenho conta</a>
+          </div>
+          <p class="hero-site__nota">Plano Professional gratuito, sem cartão de crédito.</p>
+        </div>
+
+        <!-- ilustração do produto, feita em HTML -->
+        <div class="mock" aria-hidden="true">
+          <div class="mock__barra"><span></span><span></span><span></span></div>
+          <div class="mock__corpo">
+            <div class="mock__titulo">
+              <span class="etiqueta etiqueta--ativo">Ativo</span>
+              <strong>Conjunto de eixos</strong>
+              <small>Prazo de 35 dias · 4 itens · 280 unidades</small>
+            </div>
+            <div class="mock__kpis">
+              <div><b>120</b><span>consumidas</span></div>
+              <div><b>43%</b><span>concluído</span></div>
+              <div><b>3</b><span>demandas</span></div>
+            </div>
+            <div class="mock__linha"><code>EX2-001</code><span>Eixo 20 mm</span><em>40</em><span class="etiqueta etiqueta--concluido">Consumido</span></div>
+            <div class="mock__linha"><code>EX2-002</code><span>Mancal</span><em>80</em><span class="etiqueta etiqueta--concluido">Consumido</span></div>
+            <div class="mock__linha"><code>EX2-003</code><span>Rolamento</span><em>120</em><span class="etiqueta etiqueta--ativo">Pendente</span></div>
+            <div class="mock__fluxo">
+              <span class="etiqueta">Planejamento</span><span class="etiqueta">Almoxarifado</span><span class="etiqueta etiqueta--em_andamento">Fabricação</span><span class="etiqueta">Montagem</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= PROBLEMA ================= -->
+    <section class="secao-site secao-site--alt">
+      <div class="container">
+        <div class="secao-site__cab">
+          <p class="sobre">O problema</p>
+          <h2>Sua operação já funciona, mas está espalhada.</h2>
+          <p>Planilhas por setor, recados no WhatsApp e a memória do encarregado seguram o dia a dia, até que um mês de pico expõe o que ninguém enxergava.</p>
+        </div>
+        <div class="grade-3">
+          <article class="cartao dor">
+            <h3>Tudo em lugares diferentes</h3>
+            <p>Cada processo tem o seu controle, e nenhum conversa com o outro. Saber o que está pendente exige perguntar.</p>
+          </article>
+          <article class="cartao dor">
+            <h3>Equipe no escuro</h3>
+            <p>Para a meta do mês, a equipe é decidida de cabeça. Falta gente num mês e sobra no outro, com hora extra no meio.</p>
+          </article>
+          <article class="cartao dor">
+            <h3>Sempre os mesmos sobrecarregados</h3>
+            <p>A demanda cai nos mesmos operadores porque ninguém vê a carga de cada um, e o cansaço vira erro e rotatividade.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= COMO FUNCIONA ================= -->
+    <section class="secao-site" id="como-funciona">
+      <div class="container">
+        <div class="secao-site__cab">
+          <p class="sobre">Como funciona</p>
+          <h2>Do projeto ao consumo na montagem, em quatro passos.</h2>
+        </div>
+        <ol class="passos-site">
+          <li><h3>Crie o projeto</h3><p>Nome, descrição e prazo em dias. Tudo o que será produzido fica reunido ali.</p></li>
+          <li><h3>Cadastre os itens</h3><p>RG, nome e quantidade de cada material, listados na página do projeto, com busca.</p></li>
+          <li><h3>Distribua as demandas</h3><p>Escolha o processo e atribua a quem atua nele. Cada pessoa vê só as suas.</p></li>
+          <li><h3>Acompanhe o consumo</h3><p>Um item é concluído quando é consumido na montagem, e o Montador registra isso em um clique.</p></li>
+        </ol>
+        <div class="fluxo" aria-label="Fluxo dos processos">
+          <span class="fluxo__etapa"><b>1</b> Planejamento</span>
+          <svg class="icone" aria-hidden="true"><use href="#i-seta"/></svg>
+          <span class="fluxo__etapa"><b>2</b> Almoxarifado</span>
+          <svg class="icone" aria-hidden="true"><use href="#i-seta"/></svg>
+          <span class="fluxo__etapa"><b>3</b> Fabricação</span>
+          <svg class="icone" aria-hidden="true"><use href="#i-seta"/></svg>
+          <span class="fluxo__etapa"><b>4</b> Montagem</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= RECURSOS ================= -->
+    <section class="secao-site secao-site--alt" id="recursos">
+      <div class="container">
+        <div class="secao-site__cab">
+          <p class="sobre">Recursos</p>
+          <h2>O necessário para operar, sem o que pesa.</h2>
+        </div>
+        <div class="recursos">
+          <article class="recurso"><span class="icone-caixa"><svg class="icone"><use href="#i-pasta"/></svg></span><h3>Projetos e itens</h3><p>Cada material com RG, quantidade e situação de consumo, organizado por projeto.</p></article>
+          <article class="recurso"><span class="icone-caixa"><svg class="icone"><use href="#i-lista"/></svg></span><h3>Demandas por processo</h3><p>Planejamento, Almoxarifado, Fabricação e Montagem, com responsável e andamento de cada tarefa.</p></article>
+          <article class="recurso"><span class="icone-caixa"><svg class="icone"><use href="#i-usuario"/></svg></span><h3>Acesso por categoria</h3><p>Superior, Planejador, Almoxarife, Operador e Montador: cada um enxerga e faz só o que é do seu papel.</p></article>
+          <article class="recurso"><span class="icone-caixa"><svg class="icone"><use href="#i-caixa"/></svg></span><h3>Consumo na montagem</h3><p>O Montador registra o que foi consumido, e o sistema soma o que foi concluído no mês.</p></article>
+          <article class="recurso"><span class="icone-caixa"><svg class="icone"><use href="#i-grafico"/></svg></span><h3>Previsão de equipe <span class="etiqueta etiqueta--expert">Expert</span></h3><p>Regressão treinada com o seu histórico em CSV para dizer quantas pessoas a meta do mês exige.</p></article>
+          <article class="recurso"><span class="icone-caixa"><svg class="icone"><use href="#i-relogio"/></svg></span><h3>Carga da equipe <span class="etiqueta etiqueta--expert">Expert</span></h3><p>Demandas abertas por pessoa e por processo, com alerta de possível sobrecarga.</p></article>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= PREVISÃO ================= -->
+    <section class="secao-site" id="previsao">
+      <div class="container duas-col">
+        <div>
+          <p class="sobre">Previsão de equipe</p>
+          <h2>Seu histórico do Excel vira previsão.</h2>
+          <p class="texto-suave">Você já tem o histórico de funcionários, itens concluídos e horas. Envie o CSV, escolha o que cada coluna representa e treine o modelo, como numa ferramenta de análise de dados.</p>
+          <ul class="lista-check">
+            <li><span><b>Envie o CSV</b> exportado do Excel, em qualquer formato de vírgula ou ponto e vírgula.</span></li>
+            <li><span><b>Escolha as colunas:</b> o que será previsto (funcionários) e o que entra na conta (demanda e horas).</span></li>
+            <li><span><b>Treine e confira</b> a qualidade do modelo, com métricas e gráfico.</span></li>
+            <li><span><b>Preveja o mês:</b> informe a meta de itens e as horas planejadas e veja a equipe necessária.</span></li>
+          </ul>
+          <a class="botao" href="cadastro.html">Começar agora</a>
+        </div>
+        <div class="resultado-mock" aria-hidden="true">
+          <span class="resultado-mock__rotulo">Equipe necessária</span>
+          <span class="resultado-mock__numero">9</span>
+          <span>funcionários</span>
+          <div class="resultado-mock__campos">
+            <div><small>Itens planejados</small><b>480</b></div>
+            <div><small>Horas planejadas</small><b>1.450</b></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= PLANOS ================= -->
+    <section class="secao-site secao-site--alt" id="planos">
+      <div class="container">
+        <div class="secao-site__cab">
+          <p class="sobre">Planos</p>
+          <h2>Comece grátis. Assine quando a operação crescer.</h2>
+        </div>
+        <div class="planos-site">
+          <article class="cartao plano-site">
+            <h3>Professional</h3>
+            <div class="plano-site__preco">Grátis</div>
+            <p class="texto-suave">Para organizar o registro e acompanhar as suas demandas.</p>
+            <ul class="lista-check">
+              <li><span>Projetos, itens e demandas</span></li>
+              <li><span>Acesso por categoria e processo</span></li>
+              <li><span>Registro de consumo na montagem</span></li>
+              <li class="limite"><span>Até 3 projetos ativos, 50 itens por projeto e 20 demandas abertas</span></li>
+            </ul>
+            <a class="botao botao--secundario botao--bloco" href="cadastro.html">Criar conta grátis</a>
+          </article>
+          <article class="cartao plano-site plano-site--destaque">
+            <span class="etiqueta etiqueta--expert plano-site__selo">Recomendado</span>
+            <h3>Expert</h3>
+            <div class="plano-site__preco">R$ 149<small>/mês</small></div>
+            <p class="texto-suave">Para decidir quantas pessoas alocar e evitar a sobrecarga.</p>
+            <ul class="lista-check">
+              <li><span>Tudo do Professional, sem limites de uso</span></li>
+              <li><span>Previsão de equipe treinada com o seu CSV</span></li>
+              <li><span>Carga da equipe, por pessoa e por processo</span></li>
+              <li><span>Exclusão de demandas</span></li>
+            </ul>
+            <a class="botao botao--bloco" href="cadastro.html">Criar conta e assinar</a>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= PERGUNTAS ================= -->
+    <section class="secao-site">
+      <div class="container estreito">
+        <div class="secao-site__cab">
+          <p class="sobre">Perguntas frequentes</p>
+          <h2>O que costumam perguntar</h2>
+        </div>
+        <details>
+          <summary>Preciso trocar o meu ERP?</summary>
+          <p>Não. O Atenas SGE foi pensado para pequenas operações que hoje usam planilhas e mensagens, e não substitui um ERP: cuida do dia a dia da produção e da decisão de equipe.</p>
+        </details>
+        <details>
+          <summary>De onde vêm os dados da previsão?</summary>
+          <p>Do histórico que você já tem. Você envia um CSV exportado do Excel, e o modelo é treinado só com os seus números. Nada de dados de outras empresas.</p>
+        </details>
+        <details>
+          <summary>Cada pessoa vê tudo o que eu cadastrei?</summary>
+          <p>Não. Cada usuário tem uma categoria e vê apenas as demandas em que é responsável. Quem cria o projeto vê as demandas dele.</p>
+        </details>
+        <details>
+          <summary>Posso cancelar o plano Expert?</summary>
+          <p>Sim. A assinatura é mensal, e ao cancelar a conta volta ao plano Professional, sem perder o que foi cadastrado.</p>
+        </details>
+      </div>
+    </section>
+
+    <!-- ================= CHAMADA FINAL ================= -->
+    <section class="container">
+      <div class="faixa-cta">
+        <h2>Organize a produção e planeje a equipe com dados.</h2>
+        <p>Crie a sua conta em um minuto e comece pelo plano gratuito.</p>
+        <a class="botao botao--grande botao--claro" href="cadastro.html">Criar conta grátis</a>
+      </div>
+    </section>
+  </main>
+
+  <footer class="rodape-site">
+    <div class="container rodape-site__interno">
+      <div class="marca">
+        <img src="assets/logo.png" alt="" onerror="this.style.display='none'">
+        <div><strong>Atenas SGE</strong><small>Software de Gestão Empresarial</small></div>
+      </div>
+      <nav aria-label="Atalhos">
+        <a href="login.html">Entrar</a>
+        <a href="cadastro.html">Criar conta</a>
+        <a href="#planos">Planos</a>
+      </nav>
+    </div>
+  </footer>
+</body>
+</html>
