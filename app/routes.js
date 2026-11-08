@@ -339,7 +339,19 @@ router.get('/projetos/:id', exigirLogin, async (req, res) => {
       [projeto.id]
     )
 
-    res.json({ projeto, sou_dono: souDono, demandas })
+    // Aba Excluídas: só o Planejador vê, e só as que ele mesmo excluiu neste projeto
+    let excluidas = []
+    if (categoriaDe(req.usuario) === 'planejador') {
+      ;[excluidas] = await db.query(
+        `SELECT id, rg, nome_material, quantidade, etapa_atual, planejador_id, excluida_em
+           FROM demandas
+          WHERE projeto_id = ? AND planejador_id = ? AND excluida_em IS NOT NULL
+          ORDER BY excluida_em DESC, id DESC`,
+        [projeto.id, req.usuario.usuario_id]
+      )
+    }
+
+    res.json({ projeto, sou_dono: souDono, demandas, excluidas })
   } catch (err) {
     console.error(err)
     res.status(500).json({ mensagem: 'Erro ao buscar projeto.' })
@@ -379,7 +391,25 @@ router.put('/projetos/:id', exigirLogin, exigirCategoria(['superior'], 'Só o Su
   }
 })
 
+// Demandas que a Montagem ainda não concluiu (as excluídas não contam)
+async function contarPendentes(projetoId) {
+  const [[{ total }]] = await db.query(
+    "SELECT COUNT(*) AS total FROM demandas WHERE projeto_id = ? AND etapa_atual <> 'finalizada' AND excluida_em IS NULL",
+    [projetoId]
+  )
+  return Number(total)
+}
+
+function responderPendentes(res, pendentes) {
+  return res.status(409).json({
+    mensagem: `Há ${pendentes} demanda${pendentes === 1 ? '' : 's'} que a Montagem ainda não concluiu. Confirme para continuar.`,
+    codigo: 'demandas_pendentes',
+    pendentes
+  })
+}
+
 // Exclui o projeto e, em cascata, as demandas dele (inclusive as da aba Excluídas).
+// Com demandas não concluídas pela Montagem, só segue com ?confirmar=1 (o front mostra o aviso antes).
 router.delete('/projetos/:id', exigirLogin, exigirCategoria(['superior'], 'Só o Superior pode excluir projetos.'), limitadorEscrita, async (req, res) => {
   try {
     const acesso = await carregarProjeto(req, res)
@@ -388,13 +418,16 @@ router.delete('/projetos/:id', exigirLogin, exigirCategoria(['superior'], 'Só o
       return res.status(403).json({ mensagem: 'Só quem criou o projeto pode excluí-lo.' })
     }
 
+    const pendentes = await contarPendentes(acesso.projeto.id)
+    if (pendentes > 0 && req.query.confirmar !== '1') return responderPendentes(res, pendentes)
+
     await db.query('DELETE FROM projetos WHERE id = ?', [acesso.projeto.id])
 
     registrarEvento({
       usuario_id: req.usuario.usuario_id,
       acao: 'projeto_excluido',
       ip_origem: req.ip,
-      detalhe: `projeto_id=${acesso.projeto.id}`
+      detalhe: `projeto_id=${acesso.projeto.id} pendentes=${pendentes}`
     })
 
     res.json({ mensagem: 'Projeto excluído.' })
@@ -404,12 +437,10 @@ router.delete('/projetos/:id', exigirLogin, exigirCategoria(['superior'], 'Só o
   }
 })
 
+// Concluir o projeto não pede mais o número de funcionários. Com demandas não concluídas pela Montagem,
+// só segue com ?confirmar=1; elas são encerradas (finalizada) sem passar pela Montagem e sem finalizado_em,
+// para não entrar na "demanda do mês" da previsão.
 router.patch('/projetos/:id/concluir', exigirLogin, exigirCategoria(['superior'], 'Só o Superior pode concluir projetos.'), limitadorEscrita, async (req, res) => {
-  const funcionarios = Number(req.body.funcionarios_usados)
-  if (!Number.isInteger(funcionarios) || funcionarios < 1 || funcionarios > 10000) {
-    return res.status(400).json({ mensagem: 'Informe quantos funcionários foram usados (número inteiro).' })
-  }
-
   try {
     const acesso = await carregarProjeto(req, res)
     if (!acesso) return
@@ -420,14 +451,12 @@ router.patch('/projetos/:id/concluir', exigirLogin, exigirCategoria(['superior']
       return res.status(409).json({ mensagem: 'Esse projeto já está concluído.' })
     }
 
-    await db.query(
-      "UPDATE projetos SET status = 'concluido', funcionarios_usados = ?, concluido_em = NOW() WHERE id = ?",
-      [funcionarios, acesso.projeto.id]
-    )
+    const pendentes = await contarPendentes(acesso.projeto.id)
+    if (pendentes > 0 && req.query.confirmar !== '1') return responderPendentes(res, pendentes)
 
-    // Tudo o que ainda estava pendente vira finalizada, para sair dos limites do plano
+    await db.query("UPDATE projetos SET status = 'concluido', concluido_em = NOW() WHERE id = ?", [acesso.projeto.id])
     await db.query(
-      "UPDATE demandas SET etapa_atual = 'finalizada', finalizado_em = NOW() WHERE projeto_id = ? AND etapa_atual <> 'finalizada' AND excluida_em IS NULL",
+      "UPDATE demandas SET etapa_atual = 'finalizada' WHERE projeto_id = ? AND etapa_atual <> 'finalizada' AND excluida_em IS NULL",
       [acesso.projeto.id]
     )
 
@@ -435,7 +464,7 @@ router.patch('/projetos/:id/concluir', exigirLogin, exigirCategoria(['superior']
       usuario_id: req.usuario.usuario_id,
       acao: 'projeto_concluido',
       ip_origem: req.ip,
-      detalhe: `projeto_id=${acesso.projeto.id} funcionarios_usados=${funcionarios}`
+      detalhe: `projeto_id=${acesso.projeto.id} pendentes_encerradas=${pendentes}`
     })
 
     res.json({ mensagem: 'Projeto concluído.' })
@@ -461,18 +490,30 @@ const TRANSICAO = {
 
 const ETAPA_DA_CATEGORIA = { almoxarife: 'almoxarifado', operador: 'operacao', montador: 'montagem' }
 
-function validarCamposDemanda(corpo) {
+// Processos para onde o Planejador pode destinar uma demanda (ao cadastrar ou editar), na ordem do fluxo
+const ETAPAS_DESTINO = ['almoxarifado', 'operacao', 'montagem']
+
+// Coluna que guarda quem concluiu cada etapa -> posição da etapa no fluxo
+const RESPONSAVEL_DA_ETAPA = { almoxarife_id: 0, operador_id: 1, montador_id: 2 }
+
+function validarCamposDemanda(corpo, etapaPadrao) {
   const rg = String(corpo.rg || '').trim()
   const nome_material = String(corpo.nome_material || '').trim()
   const quantidade = Number(corpo.quantidade)
   if (!rg || rg.length > 50 || !nome_material || nome_material.length > 255 || !Number.isInteger(quantidade) || quantidade < 1) {
     return { erro: 'Informe o RG (até 50 caracteres), o material (até 255) e uma quantidade válida.' }
   }
-  return { rg, nome_material, quantidade }
+
+  const semEtapa = corpo.etapa_atual === undefined || corpo.etapa_atual === null || corpo.etapa_atual === ''
+  const etapa = semEtapa ? etapaPadrao : String(corpo.etapa_atual).trim()
+  if (etapa !== null && !ETAPAS_DESTINO.includes(etapa)) {
+    return { erro: 'Escolha um processo válido (Almoxarifado, Operação ou Montagem).' }
+  }
+  return { rg, nome_material, quantidade, etapa }
 }
 
 router.post('/projetos/:id/demandas', exigirLogin, exigirCategoria(['planejador'], 'Só o Planejador pode cadastrar demandas.'), limitadorEscrita, async (req, res) => {
-  const campos = validarCamposDemanda(req.body)
+  const campos = validarCamposDemanda(req.body, ETAPA_INICIAL)
   if (campos.erro) return res.status(400).json({ mensagem: campos.erro })
 
   try {
@@ -495,14 +536,14 @@ router.post('/projetos/:id/demandas', exigirLogin, exigirCategoria(['planejador'
     const [resultado] = await db.query(
       `INSERT INTO demandas (projeto_id, rg, nome_material, quantidade, etapa_atual, planejador_id)
        VALUES (?, ?, ?, ?, ?, ?)`,
-      [acesso.projeto.id, campos.rg, campos.nome_material, campos.quantidade, ETAPA_INICIAL, req.usuario.usuario_id]
+      [acesso.projeto.id, campos.rg, campos.nome_material, campos.quantidade, campos.etapa, req.usuario.usuario_id]
     )
 
     registrarEvento({
       usuario_id: req.usuario.usuario_id,
       acao: 'demanda_criada',
       ip_origem: req.ip,
-      detalhe: `demanda_id=${resultado.insertId} etapa=${ETAPA_INICIAL}`
+      detalhe: `demanda_id=${resultado.insertId} etapa=${campos.etapa}`
     })
 
     res.status(201).json({ id: resultado.insertId })
@@ -512,38 +553,21 @@ router.post('/projetos/:id/demandas', exigirLogin, exigirCategoria(['planejador'
   }
 })
 
-// Fila do usuário:
-//  - Planejador: as demandas que criou (?excluidas=1 lista as que ele excluiu)
-//  - Almoxarife / Operador / Montador: a fila da própria etapa
-//  - Superior: não tem fila de demandas (devolve lista vazia)
+// Fila de produção: só Almoxarife, Operador e Montador têm fila (a da própria etapa).
+// Planejador e Superior não usam esta lista: devolve vazio (eles trabalham pela página do projeto).
 router.get('/demandas', exigirLogin, async (req, res) => {
   try {
-    const cat = categoriaDe(req.usuario)
-    const campos = `d.id, d.projeto_id, d.rg, d.nome_material, d.quantidade, d.etapa_atual,
-                    d.planejador_id, d.excluida_em, p.nome AS projeto_nome`
-    let linhas = []
+    const etapa = ETAPA_DA_CATEGORIA[categoriaDe(req.usuario)]
+    if (!etapa) return res.json([])
 
-    if (cat === 'planejador') {
-      const excluidas = req.query.excluidas === '1'
-      const onde = excluidas
-        ? 'd.excluida_em IS NOT NULL'
-        : "d.excluida_em IS NULL AND d.etapa_atual <> 'finalizada'"
-      const ordem = excluidas
-        ? 'd.excluida_em DESC, d.id DESC'
-        : "FIELD(d.etapa_atual, 'almoxarifado', 'operacao', 'montagem'), d.id"
-      ;[linhas] = await db.query(
-        `SELECT ${campos} FROM demandas d JOIN projetos p ON p.id = d.projeto_id
-          WHERE d.planejador_id = ? AND ${onde} ORDER BY ${ordem}`,
-        [req.usuario.usuario_id]
-      )
-    } else if (ETAPA_DA_CATEGORIA[cat]) {
-      ;[linhas] = await db.query(
-        `SELECT ${campos} FROM demandas d JOIN projetos p ON p.id = d.projeto_id
-          WHERE d.etapa_atual = ? AND d.excluida_em IS NULL ORDER BY d.id`,
-        [ETAPA_DA_CATEGORIA[cat]]
-      )
-    }
-
+    const [linhas] = await db.query(
+      `SELECT d.id, d.projeto_id, d.rg, d.nome_material, d.quantidade, d.etapa_atual, d.planejador_id,
+              p.nome AS projeto_nome
+         FROM demandas d JOIN projetos p ON p.id = d.projeto_id
+        WHERE d.etapa_atual = ? AND d.excluida_em IS NULL
+        ORDER BY d.id`,
+      [etapa]
+    )
     res.json(linhas)
   } catch (err) {
     console.error(err)
@@ -588,24 +612,34 @@ async function carregarDemandaGerenciavel(req, res) {
   return demanda
 }
 
+// Editar: corrige RG, material e quantidade e/ou destina a demanda para outro processo.
+// Ao voltar para um processo anterior, apaga quem já tinha concluído as etapas dali em diante.
 router.put('/demandas/:id', exigirLogin, limitadorEscrita, async (req, res) => {
-  const campos = validarCamposDemanda(req.body)
+  const campos = validarCamposDemanda(req.body, null)
   if (campos.erro) return res.status(400).json({ mensagem: campos.erro })
 
   try {
     const demanda = await carregarDemandaGerenciavel(req, res)
     if (!demanda) return
 
+    const etapa = campos.etapa || demanda.etapa_atual
+    const posicao = ETAPAS_DESTINO.indexOf(etapa)
+    const limpar = Object.keys(RESPONSAVEL_DA_ETAPA)
+      .filter(coluna => RESPONSAVEL_DA_ETAPA[coluna] >= posicao)
+      .map(coluna => `${coluna} = NULL`)
+      .join(', ')
+
     await db.query(
-      'UPDATE demandas SET rg = ?, nome_material = ?, quantidade = ? WHERE id = ?',
-      [campos.rg, campos.nome_material, campos.quantidade, demanda.id]
+      `UPDATE demandas SET rg = ?, nome_material = ?, quantidade = ?, etapa_atual = ?, ${limpar}
+        WHERE id = ? AND excluida_em IS NULL`,
+      [campos.rg, campos.nome_material, campos.quantidade, etapa, demanda.id]
     )
 
     registrarEvento({
       usuario_id: req.usuario.usuario_id,
       acao: 'demanda_editada',
       ip_origem: req.ip,
-      detalhe: `demanda_id=${demanda.id}`
+      detalhe: `demanda_id=${demanda.id} etapa=${etapa}`
     })
 
     res.json({ mensagem: 'Demanda atualizada.' })
