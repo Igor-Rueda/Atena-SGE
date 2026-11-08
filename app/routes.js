@@ -19,15 +19,17 @@ const TAMANHO_MAXIMO_MB = Number(process.env.PROFILE_IMAGE_MAX_SIZE_MB || 5)
 // Hierarquia cumulativa: cada papel faz o que o anterior faz.
 const HIERARQUIA = ['professional', 'expert', 'admin']
 
-// Categorias de usuário no novo pipeline (Planejador = cria; Almoxarife/Operador/Montador = movem)
-const ROTULO_CATEGORIA = { superior: 'Superior', planejador: 'Planejador', almoxarife: 'Almoxarife', operador: 'Operador', montador: 'Montador' }
-
+// Categorias de usuário no pipeline: Planejador cria/edita/exclui; Almoxarife, Operador e Montador movem a demanda;
+// Superior atua em qualquer etapa. Tokens antigos, sem categoria, valem como Superior.
 function categoriaDe(usuario) {
   return usuario.categoria || 'superior'
 }
 
 // Etapas sequenciais do pipeline de produção
 const FLUXO = ['almoxarifado', 'operacao', 'montagem', 'finalizada']
+
+// Toda demanda criada pelo Planejador entra direto na fila do Almoxarifado
+const ETAPA_INICIAL = 'almoxarifado'
 
 // Limites do plano gratuito. Só contam o que está ATIVO
 const LIMITES = {
@@ -343,7 +345,7 @@ router.patch('/projetos/:id/concluir', exigirLogin, limitadorEscrita, async (req
     )
 
     // Força tudo o que estava pendente na fila pra finalizada pra sair dos limites
-    await db.query("UPDATE demandas SET etapa_atual = 'finalizada' WHERE projeto_id = ? AND etapa_atual <> 'finalizada'", [acesso.projeto.id])
+    await db.query("UPDATE demandas SET etapa_atual = 'finalizada', finalizado_em = NOW() WHERE projeto_id = ? AND etapa_atual <> 'finalizada'", [acesso.projeto.id])
 
     registrarEvento({
       usuario_id: req.usuario.usuario_id,
@@ -362,17 +364,10 @@ router.patch('/projetos/:id/concluir', exigirLogin, limitadorEscrita, async (req
 // ---------- PIPELINE: NOVA ROTA DE CRIAÇÃO ----------
 
 router.post('/projetos/:id/demandas', exigirLogin, limitadorEscrita, async (req, res) => {
-  const rg = String(req.body.rg || '').trim()
-  const nome_material = String(req.body.nome_material || '').trim()
-  const quantidade = Number(req.body.quantidade)
-  const etapa_atual = String(req.body.etapa_atual || '').trim()
-
-  if (!rg || !nome_material || !Number.isInteger(quantidade) || quantidade < 1) {
-    return res.status(400).json({ mensagem: 'Informe o RG, material e quantidade válida.' })
-  }
-  if (!['almoxarifado', 'operacao', 'montagem'].includes(etapa_atual)) {
-    return res.status(400).json({ mensagem: 'Etapa inicial inválida.' })
-  }
+  const campos = validarCamposDemanda(req.body)
+  if (campos.erro) return res.status(400).json({ mensagem: campos.erro })
+  const { rg, nome_material, quantidade } = campos
+  const etapa_atual = ETAPA_INICIAL
 
   try {
     const acesso = await carregarProjeto(req, res)
@@ -434,6 +429,10 @@ router.patch('/demandas/:id/avancar', exigirLogin, limitadorEscrita, async (req,
       return res.status(404).json({ mensagem: 'Demanda não encontrada.' })
     }
 
+    if (demanda.etapa_atual === 'finalizada') {
+      return res.status(409).json({ mensagem: 'Essa demanda já está finalizada.' })
+    }
+
     const cat = categoriaDe(req.usuario)
     const ehSuperior = cat === 'superior'
 
@@ -457,10 +456,13 @@ router.patch('/demandas/:id/avancar', exigirLogin, limitadorEscrita, async (req,
        return res.status(403).json({ mensagem: 'Sua categoria não permite avançar esta demanda no estado atual.' })
     }
 
-    await db.query(
-      `UPDATE demandas SET etapa_atual = ?, ${updateCampo} = ? WHERE id = ?`, 
-      [novaEtapa, req.usuario.usuario_id, id]
+    const [atualizacao] = await db.query(
+      `UPDATE demandas SET etapa_atual = ?, ${updateCampo} = ?${novaEtapa === 'finalizada' ? ', finalizado_em = NOW()' : ''} WHERE id = ? AND etapa_atual = ?`,
+      [novaEtapa, req.usuario.usuario_id, id, demanda.etapa_atual]
     )
+    if (atualizacao.affectedRows === 0) {
+      return res.status(409).json({ mensagem: 'Essa demanda já foi movida por outra pessoa. Atualize a página.' })
+    }
 
     if (novaEtapa === 'finalizada') {
       registrarEvento({
@@ -478,30 +480,142 @@ router.patch('/demandas/:id/avancar', exigirLogin, limitadorEscrita, async (req,
   }
 })
 
-// EXCLUIR demanda: só Expert (ou admin).
-router.delete('/demandas/:id', exigirLogin, exigirNivel('expert'), limitadorEscrita, async (req, res) => {
-  const id = Number(req.params.id)
-  
-  if (!Number.isInteger(id) || id <= 0) {
-    return res.status(400).json({ mensagem: 'Id inválido.' })
-  }
+// ---------- PIPELINE: FILA DE PRODUÇÃO DO USUÁRIO ----------
 
+const ETAPA_DA_CATEGORIA = { almoxarife: 'almoxarifado', operador: 'operacao', montador: 'montagem' }
+
+// Superior vê toda a fila; Planejador vê as demandas que criou; os demais veem a fila da sua etapa.
+router.get('/demandas', exigirLogin, async (req, res) => {
   try {
-    const [linhas] = await db.query(
-      'SELECT d.id FROM demandas d JOIN projetos p ON p.id = d.projeto_id WHERE d.id = ? AND (p.criado_por = ? OR ?)',
-      [id, req.usuario.usuario_id, ehAdmin(req)]
-    )
-    if (linhas.length === 0) {
-      return res.status(404).json({ mensagem: 'Demanda não encontrada.' })
+    const cat = categoriaDe(req.usuario)
+    let filtro = ''
+    let params = []
+
+    if (!ehAdmin(req) && cat !== 'superior') {
+      if (cat === 'planejador') {
+        filtro = 'AND d.planejador_id = ?'
+        params = [req.usuario.usuario_id]
+      } else if (ETAPA_DA_CATEGORIA[cat]) {
+        filtro = 'AND d.etapa_atual = ?'
+        params = [ETAPA_DA_CATEGORIA[cat]]
+      } else {
+        return res.json([])
+      }
     }
 
-    await db.query('DELETE FROM demandas WHERE id = ?', [id])
+    const [linhas] = await db.query(
+      `SELECT d.id, d.projeto_id, d.rg, d.nome_material, d.quantidade, d.etapa_atual, d.planejador_id,
+              p.nome AS projeto_nome
+         FROM demandas d JOIN projetos p ON p.id = d.projeto_id
+        WHERE d.etapa_atual <> 'finalizada' ${filtro}
+        ORDER BY FIELD(d.etapa_atual, 'almoxarifado', 'operacao', 'montagem'), d.id`,
+      params
+    )
+    res.json(linhas)
+  } catch (err) {
+    console.error(err)
+    res.status(500).json({ mensagem: 'Erro ao buscar a fila de produção.' })
+  }
+})
+
+// ---------- PIPELINE: EDITAR E EXCLUIR (Planejador) ----------
+
+function validarCamposDemanda(corpo) {
+  const rg = String(corpo.rg || '').trim()
+  const nome_material = String(corpo.nome_material || '').trim()
+  const quantidade = Number(corpo.quantidade)
+  if (!rg || rg.length > 50 || !nome_material || nome_material.length > 255 || !Number.isInteger(quantidade) || quantidade < 1) {
+    return { erro: 'Informe o RG (até 50 caracteres), o material (até 255) e uma quantidade válida.' }
+  }
+  return { rg, nome_material, quantidade }
+}
+
+// Quem pode alterar/excluir: admin, Superior, ou o Planejador que criou a demanda / dono do projeto.
+function podeGerirDemanda(req, demanda) {
+  const cat = categoriaDe(req.usuario)
+  if (ehAdmin(req) || cat === 'superior') return true
+  if (cat !== 'planejador') return false
+  return demanda.planejador_id === req.usuario.usuario_id || demanda.projeto_criado_por === req.usuario.usuario_id
+}
+
+// Carrega a demanda e já responde 400/404/403/409 quando não dá para seguir. Devolve null nesses casos.
+async function carregarDemandaGerenciavel(req, res) {
+  const id = Number(req.params.id)
+  if (!Number.isInteger(id) || id <= 0) {
+    res.status(400).json({ mensagem: 'Id inválido.' })
+    return null
+  }
+
+  const [linhas] = await db.query(
+    `SELECT d.id, d.etapa_atual, d.planejador_id, p.criado_por AS projeto_criado_por
+       FROM demandas d JOIN projetos p ON p.id = d.projeto_id
+      WHERE d.id = ?`,
+    [id]
+  )
+  const demanda = linhas[0]
+  if (!demanda) {
+    res.status(404).json({ mensagem: 'Demanda não encontrada.' })
+    return null
+  }
+
+  if (!podeGerirDemanda(req, demanda)) {
+    registrarEvento({
+      usuario_id: req.usuario.usuario_id,
+      acao: 'acesso_negado',
+      ip_origem: req.ip,
+      detalhe: `rota=${req.method} ${req.originalUrl} categoria=${categoriaDe(req.usuario)}`
+    })
+    res.status(403).json({ mensagem: 'Só o Planejador que criou a demanda, o dono do projeto ou um Superior pode alterá-la.' })
+    return null
+  }
+
+  if (demanda.etapa_atual === 'finalizada') {
+    res.status(409).json({ mensagem: 'Demandas finalizadas não podem ser alteradas.' })
+    return null
+  }
+  return demanda
+}
+
+router.put('/demandas/:id', exigirLogin, limitadorEscrita, async (req, res) => {
+  const campos = validarCamposDemanda(req.body)
+  if (campos.erro) return res.status(400).json({ mensagem: campos.erro })
+
+  try {
+    const demanda = await carregarDemandaGerenciavel(req, res)
+    if (!demanda) return
+
+    await db.query(
+      'UPDATE demandas SET rg = ?, nome_material = ?, quantidade = ? WHERE id = ?',
+      [campos.rg, campos.nome_material, campos.quantidade, demanda.id]
+    )
+
+    registrarEvento({
+      usuario_id: req.usuario.usuario_id,
+      acao: 'demanda_editada',
+      ip_origem: req.ip,
+      detalhe: `demanda_id=${demanda.id}`
+    })
+
+    res.json({ mensagem: 'Demanda atualizada.' })
+  } catch (err) {
+    console.error(err)
+    res.status(500).json({ mensagem: 'Erro ao editar demanda.' })
+  }
+})
+
+// EXCLUIR demanda: regra por categoria (Planejador/Superior), não depende mais do plano.
+router.delete('/demandas/:id', exigirLogin, limitadorEscrita, async (req, res) => {
+  try {
+    const demanda = await carregarDemandaGerenciavel(req, res)
+    if (!demanda) return
+
+    await db.query('DELETE FROM demandas WHERE id = ?', [demanda.id])
 
     registrarEvento({
       usuario_id: req.usuario.usuario_id,
       acao: 'demanda_excluida',
       ip_origem: req.ip,
-      detalhe: `demanda_id=${id}`
+      detalhe: `demanda_id=${demanda.id}`
     })
 
     res.json({ mensagem: 'Demanda excluída.' })
