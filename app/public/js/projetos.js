@@ -16,13 +16,13 @@ function cartao(p) {
   if (!p.sou_dono) etiquetas.appendChild(el('span', 'Atribuído a você', 'etiqueta'));
 
   const meta = el('div', undefined, 'projeto-card__meta');
-  const itens = el('span');
-  itens.innerHTML = Atenas.icone('caixa', 15);
-  itens.append(p.total_itens + (p.total_itens === 1 ? ' item' : ' itens'));
+  const demandas = el('span');
+  demandas.innerHTML = Atenas.icone('lista', 15);
+  demandas.append(p.total_demandas + (p.total_demandas === 1 ? ' demanda' : ' demandas'));
   const prazo = el('span');
   prazo.innerHTML = Atenas.icone('relogio', 15);
   prazo.append(p.prazo_dias ? p.prazo_dias + ' dias' : 'Sem prazo');
-  meta.append(itens, prazo);
+  meta.append(demandas, prazo);
 
   const abrir = el('div', undefined, 'projeto-card__abrir');
   abrir.append('Abrir projeto');
@@ -40,7 +40,7 @@ function renderizar() {
   lista.hidden = visiveis.length === 0;
   if (visiveis.length === 0) {
     document.getElementById('vazio-texto').textContent = todos.length === 0
-      ? 'Crie o primeiro projeto para começar a cadastrar itens e demandas.'
+      ? 'Crie o primeiro projeto para começar a gerenciar sua fila de produção.'
       : 'Nenhum projeto neste filtro.';
   }
 }

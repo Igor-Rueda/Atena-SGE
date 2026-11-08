@@ -1,4 +1,4 @@
-/* Página de um projeto: informações no topo, itens (RGs) e demandas ao descer */
+/* Página de um projeto: informações no topo e fluxo de demandas */
 .projeto-topo { margin-bottom: 1.5rem; padding: clamp(1.25rem, 3vw, 2rem); }
 .projeto-topo__cabecalho { display: flex; justify-content: space-between; align-items: flex-start; gap: 1.5rem; flex-wrap: wrap; }
 .projeto-topo__titulo { min-width: 0; flex: 1 1 320px; }
@@ -12,5 +12,4 @@
 
 .bloco { margin-bottom: 1.5rem; }
 .bloco__ferramentas { display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap; margin-bottom: 0.9rem; }
-.busca { max-width: 280px; }
 .form-inline { margin-bottom: 1.1rem; padding: 1.1rem 1.1rem 0.25rem; background: var(--cor-fundo); border: 1px solid var(--cor-borda-suave); border-radius: var(--raio-m); }
