@@ -57,7 +57,6 @@ O plano **é** o papel do usuário: pagar o Expert muda o papel, e o middleware 
 | Demandas abertas ao mesmo tempo *(hipótese)* | Até 20 | Sem limite |
 | Excluir demandas | Não | Sim |
 | **Análise:** previsão de equipe (regressão linear múltipla treinada com o histórico em CSV) | Não | Sim |
-| **Análise:** carga da equipe (demandas abertas por pessoa e por processo) | Não | Sim |
 
 **Por que alguém pagaria o Expert:** o Professional resolve o registro e a consulta, mas o limite de 3 projetos ativos aperta quando a operação cresce, e só o Expert ajuda a decidir. A previsão de equipe evita hora extra e sobrecarga, e o custo mensal tem que ser menor que uma hora extra evitada *(hipótese a validar)*.
 
@@ -91,7 +90,7 @@ O modelo fica guardado por usuário, então a previsão está disponível sem tr
 | **Problema** | 1) Demandas espalhadas em planilha, papel e WhatsApp. 2) O gestor não sabe quantas pessoas alocar para a meta do mês, embora tenha o histórico guardado. 3) A demanda sobrecarrega os funcionários, que ainda recebem informação demais ou de menos. Hoje: planilha e memória. |
 | **Segmentos de clientes** | Empresas industriais pequenas com os processos de planejamento, almoxarifado, fabricação e montagem. Primeiros adotantes: gestores e encarregados sem ERP. |
 | **Proposta única de valor** | Gestão de demandas simples, com acesso por categoria e processo, e previsão de equipe treinada com o histórico do próprio cliente, sem a complexidade de um ERP. |
-| **Solução** | 1) Projetos, itens (RG, quantidade, consumo na montagem) e demandas por processo, com cada pessoa vendo as suas. 2) Categorias de usuário ligadas aos processos: cada pessoa vê só o necessário. 3) Análise (Expert): previsão de equipe por regressão treinada com o CSV do cliente, e carga da equipe. |
+| **Solução** | 1) Projetos, itens (RG, quantidade, consumo na montagem) e demandas por processo, com cada pessoa vendo as suas. 2) Categorias de usuário ligadas aos processos: cada pessoa vê só o necessário. 3) Análise (Expert): previsão de equipe por regressão treinada com o CSV do cliente. |
 | **Canais** | Visitas a pequenas indústrias da região, indicação entre gestores, landing page. |
 | **Fontes de receita** | Assinatura mensal Expert via Stripe. O plano Professional é a porta de entrada. |
 | **Estrutura de custos** | Infraestrutura (mesma stack), taxas do Stripe, tempo de desenvolvimento e suporte. |
@@ -107,7 +106,7 @@ Informação demais atrapalha o operacional e informação faltando compromete a
 | Papel | Quem é | Pode fazer |
 |---|---|---|
 | `professional` | Todo usuário novo (plano gratuito) | Cadastrar projetos, itens e demandas (atribuindo a demanda a outro usuário pelo e-mail), dentro dos limites do plano; ver **só as demandas em que é responsável** |
-| `expert` | Assinante do plano pago | Tudo do Professional **+** Análise (previsão de equipe e carga da equipe) e exclusão de demandas, sem limites de uso |
+| `expert` | Assinante do plano pago | Tudo do Professional **+** Análise (previsão de equipe) e exclusão de demandas, sem limites de uso |
 | `admin` | Administrador do produto, usado para testar rotas | Tudo do Expert. Não é vendável, não aparece na página de planos e só nasce por comando no banco |
 
 ### 8.2 Categorias de usuário e processos
@@ -132,7 +131,7 @@ Os processos são uma **lista fixa** (não texto livre), selecionada ao criar um
 | Peça do projeto anterior | O que vira no Atenas SGE |
 |---|---|
 | Catálogo de filmes (TMDB) | Recurso principal: **projetos, itens** (RG, quantidade, consumo) e **demandas** por processo (planejamento, almoxarifado, fabricação, montagem) |
-| Tier list dos stalkers | **Análise** (Expert): previsão de equipe treinada por CSV e carga da equipe |
+| Tier list dos stalkers | **Análise** (Expert): previsão de equipe treinada por CSV |
 | Serviço e pasta `catalogo` | Renomeado para **`app`**: continua sendo o único serviço público e a porta de entrada dos demais serviços |
 | Login + RBAC | Papéis do plano `professional` < `expert` < `admin` (cumulativos) e, em paralelo, a **categoria** do usuário. O `exigirNivel` e o padrão de claims no JWT continuam |
 | Logs e auditoria (Redis) | Eventos de negócio: `projeto_criado`, `item_cadastrado`, `demanda_criada`, `demanda_excluida`, `modelo_treinado`, `previsao_consultada`, `limite_plano_atingido`, `acesso_negado` e outros. Consulta restrita ao `admin` |
@@ -153,7 +152,7 @@ Os processos são uma **lista fixa** (não texto livre), selecionada ao criar um
 | `regressao` | Treino e previsão (Python) | não |
 | MariaDB | Banco compartilhado (remoto) | externo |
 
-Telas do `app`: **Início** (guia da interface), **Projetos**, **Projeto** (dados no topo, itens com RG e situação, demandas), **Minhas demandas**, **Análise** (previsão de equipe e carga da equipe, só Expert), **Planos** e **Perfil**, além de login, cadastro e recuperação de senha. O CSS é dividido em `tokens`, `base`, `componentes`, `layout`, `auth` e um arquivo por página.
+Telas do `app`: **Início** (guia da interface), **Projetos**, **Projeto** (dados no topo, itens com RG e situação, demandas), **Minhas demandas**, **Análise** (previsão de equipe, só Expert), **Planos** e **Perfil**, além de login, cadastro e recuperação de senha. O CSS é dividido em `tokens`, `base`, `componentes`, `layout`, `auth` e um arquivo por página.
 
 ## 11. Como rodar (resumo)
 

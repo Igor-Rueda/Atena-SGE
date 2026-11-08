@@ -77,9 +77,9 @@ Até 3 projetos ativos, 50 itens por projeto e 20 demandas abertas, contados por
 Serviço interno em Python, sem porta pública, protegido por `INTERNAL_API_KEY`. Endpoints (todos via `app`, só `expert` e `admin`): prévia do CSV com sugestão de papel por coluna, treino (regressão linear múltipla por mínimos quadrados, com R², R² ajustado, MAE, RMSE, validação cruzada "deixa um de fora", coeficientes, importância e avisos), consulta do modelo, previsão e descarte. O modelo fica guardado por usuário na tabela `modelos_regressao`. Aceita CSV com `;`, `,` ou tabulação, decimal com vírgula ou ponto, UTF-8 ou ANSI, até 2 MB e 5.000 linhas, e recusa `.xlsx` com orientação. Há testes unitários e de API (`regressao/tests`) e o passo de teste no CI.
 **Pronto quando:** o CI executa os testes do serviço e um `expert` treina com um CSV e recebe previsão; um `professional` recebe `403`.
 
-### 14. Página Análise (previsão de equipe e carga da equipe)
+### 14. Página Análise (previsão de equipe)
 **Status:** Feito (não testado) · **Labels:** `atividade-11` `frontend`
-Substitui "Previsão de equipe". Abas: **Previsão de equipe** (envio do CSV, escolha de colunas no estilo Orange, aviso de carregamento durante o treino, métricas, coeficientes, gráfico real × previsto e formulário de previsão com a meta de itens e as horas planejadas) e **Carga da equipe** (demandas abertas por pessoa e por processo). Bloqueada para o `professional`, com a trava real no backend.
+Substitui "Previsão de equipe". Aba: **Previsão de equipe** (envio do CSV, escolha de colunas no estilo Orange, aviso de carregamento durante o treino, métricas, coeficientes, gráfico real × previsto e formulário de previsão com a meta de itens e as horas planejadas). Bloqueada para o `professional`, com a trava real no backend.
 **Pronto quando:** um `expert` envia um CSV, escolhe as colunas, treina e prevê; um `professional` vê o bloqueio.
 
 ### 15. CI: testes, schema e Garage de teste
