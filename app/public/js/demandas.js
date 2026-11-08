@@ -5,28 +5,54 @@ const vazio = document.getElementById('vazio');
 
 const ROTULO_ETAPA = { almoxarifado: 'Almoxarifado', operacao: 'Operação', montagem: 'Montagem', finalizada: 'Finalizada' };
 
+// Cada etapa só é avançada pela categoria dona dela (ou pelo Superior). O servidor valida de novo.
+const FLUXO = {
+  almoxarifado: { categoria: 'almoxarife', texto: 'Concluir e enviar para Operação' },
+  operacao:     { categoria: 'operador',   texto: 'Concluir e enviar para Montagem' },
+  montagem:     { categoria: 'montador',   texto: 'Finalizar demanda' }
+};
+
 let todas = [];
 
-async function avancarDemanda(d, botao) {
+function podeAvancar(etapa) {
+  const regra = FLUXO[etapa];
+  if (!regra || !Atenas.me) return false;
+  return Atenas.me.categoria === regra.categoria || Atenas.me.categoria === 'superior';
+}
+
+function podeGerenciar(d) {
+  const me = Atenas.me;
+  if (!me || d.etapa_atual === 'finalizada') return false;
+  if (me.role === 'admin' || me.categoria === 'superior') return true;
+  return me.categoria === 'planejador' && d.planejador_id === me.usuario_id;
+}
+
+async function avancarDemanda(botao, d) {
   botao.disabled = true;
   const r = await Atenas.api('/api/demandas/' + d.id + '/avancar', { method: 'PATCH' });
-  if (r.ok) { 
-    Atenas.aviso('Etapa avançada.', 'sucesso'); 
-    carregar(); 
-  } else { 
-    botao.disabled = false; 
-  }
+  if (r.ok) Atenas.aviso('Etapa avançada.', 'sucesso');
+  if (r.ok || r.status === 409) return carregar(); // 409: outra pessoa já moveu, recarrega a fila
+  botao.disabled = false;
+}
+
+async function excluirDemanda(d) {
+  const confirmou = await Atenas.modal({
+    titulo: 'Excluir demanda?',
+    texto: d.rg + ' — ' + d.nome_material + '. Essa ação não pode ser desfeita.',
+    confirmar: 'Excluir',
+    perigo: true
+  });
+  if (!confirmou) return;
+  const r = await Atenas.api('/api/demandas/' + d.id, { method: 'DELETE' });
+  if (r.ok) { Atenas.aviso('Demanda excluída.', 'sucesso'); carregar(); }
 }
 
 function linha(d) {
   const item = el('div', undefined, 'demanda');
-  
-  // A query do routes.js mapeou etapa_atual para 'atividade' e 'status'
-  const etapa = d.atividade || d.status; 
-  item.appendChild(el('span', ROTULO_ETAPA[etapa] || etapa, 'etiqueta etiqueta--' + etapa));
+  item.appendChild(el('span', ROTULO_ETAPA[d.etapa_atual] || d.etapa_atual, 'etiqueta etiqueta--' + d.etapa_atual));
 
   const info = el('div', undefined, 'demanda__info');
-  info.appendChild(el('strong', d.descricao));
+  info.appendChild(el('strong', d.rg + ' — ' + d.nome_material + ' (Qtd: ' + d.quantidade + ')'));
   const projeto = el('small');
   projeto.append('Projeto: ');
   const link = el('a', d.projeto_nome);
@@ -37,22 +63,23 @@ function linha(d) {
 
   const acoes = el('div', undefined, 'demanda__acoes');
 
-  const cat = Atenas.me ? Atenas.me.categoria : '';
-  const superior = cat === 'superior';
-  let btnTexto = '';
-
-  if (etapa === 'almoxarifado' && (cat === 'almoxarife' || superior)) {
-     btnTexto = 'Repassar para Operação';
-  } else if (etapa === 'operacao' && (cat === 'operador' || superior)) {
-     btnTexto = 'Repassar para Montagem';
-  } else if (etapa === 'montagem' && (cat === 'montador' || superior)) {
-     btnTexto = 'Finalizar Demanda';
+  if (podeAvancar(d.etapa_atual)) {
+    const btn = el('button', FLUXO[d.etapa_atual].texto, 'botao botao--pequeno');
+    btn.type = 'button';
+    btn.addEventListener('click', function () { avancarDemanda(btn, d); });
+    acoes.appendChild(btn);
   }
 
-  if (btnTexto) {
-     const btn = el('button', btnTexto, 'botao botao--pequeno');
-     btn.addEventListener('click', function() { avancarDemanda(d, btn); });
-     acoes.appendChild(btn);
+  if (podeGerenciar(d)) {
+    // a edição usa o formulário da página do projeto
+    const editar = el('a', 'Editar', 'botao botao--pequeno botao--secundario');
+    editar.href = 'projeto.html?id=' + d.projeto_id + '&editar=' + d.id;
+    acoes.appendChild(editar);
+
+    const excluir = el('button', 'Excluir', 'botao botao--pequeno botao--perigo');
+    excluir.type = 'button';
+    excluir.addEventListener('click', function () { excluirDemanda(d); });
+    acoes.appendChild(excluir);
   }
 
   item.appendChild(acoes);

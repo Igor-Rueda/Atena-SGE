@@ -3,8 +3,17 @@ const el = Atenas.el;
 const id = Number(new URLSearchParams(window.location.search).get('id'));
 
 let estado = null; // { projeto, sou_dono, demandas }
+let editandoId = null; // demanda em edição (null = criando)
+let editarPendente = Number(new URLSearchParams(window.location.search).get('editar')) || null; // vindo da fila
 
 const ROTULO_ETAPA = { almoxarifado: 'Almoxarifado', operacao: 'Operação', montagem: 'Montagem', finalizada: 'Finalizada' };
+
+// Cada etapa só é avançada pela categoria dona dela (ou pelo Superior). O servidor valida de novo.
+const FLUXO = {
+  almoxarifado: { categoria: 'almoxarife', texto: 'Concluir e enviar para Operação' },
+  operacao:     { categoria: 'operador',   texto: 'Concluir e enviar para Montagem' },
+  montagem:     { categoria: 'montador',   texto: 'Finalizar demanda' },
+};
 
 function $(id_str) { return document.getElementById(id_str); }
 
@@ -24,6 +33,20 @@ async function carregar() {
   }
   estado = r.dados;
   renderizar();
+}
+
+// ---------- permissões (espelham as do servidor, que é quem decide) ----------
+function podeAvancar(d) {
+  const regra = FLUXO[d.etapa_atual];
+  if (!regra || !Atenas.me) return false;
+  return Atenas.me.categoria === regra.categoria || Atenas.me.categoria === 'superior';
+}
+
+function podeGerenciar(d) {
+  const me = Atenas.me;
+  if (!me || d.etapa_atual === 'finalizada') return false;
+  if (me.role === 'admin' || me.categoria === 'superior') return true;
+  return me.categoria === 'planejador' && (d.planejador_id === me.usuario_id || estado.sou_dono);
 }
 
 // ---------- topo do projeto ----------
@@ -59,51 +82,43 @@ function renderizarTopo() {
 async function avancarDemanda(demanda, botao) {
   botao.disabled = true;
   const r = await Atenas.api('/api/demandas/' + demanda.id + '/avancar', { method: 'PATCH' });
-  if (r.ok) { Atenas.aviso('Etapa avançada.', 'sucesso'); carregar(); }
-  else { botao.disabled = false; }
+  if (r.ok) Atenas.aviso('Etapa avançada.', 'sucesso');
+  if (r.ok || r.status === 409) return carregar(); // 409: outra pessoa já moveu, recarrega
+  botao.disabled = false;
 }
 
 function linhaDemanda(d) {
   const linha = el('div', undefined, 'demanda');
-  
-  // Etapa atual vira o crachá
   linha.appendChild(el('span', ROTULO_ETAPA[d.etapa_atual] || d.etapa_atual, 'etiqueta etiqueta--' + d.etapa_atual));
 
   const info = el('div', undefined, 'demanda__info');
-  const titulo = el('strong');
-  titulo.textContent = d.rg + ' — ' + d.nome_material + ' (Qtd: ' + d.quantidade + ')';
-  info.appendChild(titulo);
+  info.appendChild(el('strong', d.rg + ' — ' + d.nome_material + ' (Qtd: ' + d.quantidade + ')'));
   linha.appendChild(info);
 
   const acoes = el('div', undefined, 'demanda__acoes');
 
-  // Lógica de quem pode apertar o botão de avançar
-  const cat = Atenas.me ? Atenas.me.categoria : '';
-  const superior = cat === 'superior';
-  let btnTexto = '';
-
-  if (d.etapa_atual === 'almoxarifado' && (cat === 'almoxarife' || superior)) {
-     btnTexto = 'Repassar para Operação';
-  } else if (d.etapa_atual === 'operacao' && (cat === 'operador' || superior)) {
-     btnTexto = 'Repassar para Montagem';
-  } else if (d.etapa_atual === 'montagem' && (cat === 'montador' || superior)) {
-     btnTexto = 'Finalizar Demanda';
+  if (podeAvancar(d)) {
+    const btn = el('button', FLUXO[d.etapa_atual].texto, 'botao botao--pequeno');
+    btn.type = 'button';
+    btn.addEventListener('click', function () { avancarDemanda(d, btn); });
+    acoes.appendChild(btn);
   }
 
-  if (btnTexto) {
-     const btn = el('button', btnTexto, 'botao botao--pequeno');
-     btn.addEventListener('click', function() { avancarDemanda(d, btn); });
-     acoes.appendChild(btn);
-  }
+  if (podeGerenciar(d)) {
+    const editar = el('button', undefined, 'botao botao--fantasma botao--pequeno');
+    editar.type = 'button';
+    editar.title = 'Editar demanda';
+    editar.setAttribute('aria-label', 'Editar demanda');
+    editar.innerHTML = Atenas.icone('lapis', 17);
+    editar.addEventListener('click', function () { iniciarEdicao(d); });
+    acoes.appendChild(editar);
 
-  if (estado.sou_dono && d.etapa_atual !== 'finalizada') {
     const apagar = el('button', undefined, 'botao botao--fantasma botao--pequeno');
     apagar.type = 'button';
     apagar.title = 'Excluir demanda';
     apagar.setAttribute('aria-label', 'Excluir demanda');
     apagar.innerHTML = Atenas.icone('lixeira', 17);
     apagar.addEventListener('click', async function () {
-      if (!Atenas.ehExpert()) return Atenas.abrirModalUpgrade('Excluir demandas é um recurso do plano Expert.');
       const confirmou = await Atenas.modal({
         titulo: 'Excluir demanda?', texto: 'Essa ação não pode ser desfeita.', confirmar: 'Excluir', perigo: true,
       });
@@ -135,32 +150,77 @@ function renderizar() {
   $('conteudo-projeto').hidden = false;
   renderizarTopo();
   renderizarDemandas();
+
+  // veio da fila com ?editar=ID: abre o formulário já preenchido
+  if (editarPendente) {
+    const alvo = estado.demandas.find(function (d) { return d.id === editarPendente; });
+    editarPendente = null;
+    if (alvo && podeGerenciar(alvo)) iniciarEdicao(alvo);
+  }
 }
 
-// ---------- formulários e ações ----------
+// ---------- formulário de demanda (criar e editar) ----------
 function mostrarForm(f, mostrar) {
   f.hidden = !mostrar;
   if (mostrar) f.querySelector('input').focus();
 }
 
 const formDemanda = $('form-demanda');
-$('btn-add-demanda').addEventListener('click', function () { mostrarForm(formDemanda, formDemanda.hidden); });
-$('btn-cancelar-demanda').addEventListener('click', function () { mostrarForm(formDemanda, false); formDemanda.reset(); });
+const botaoSalvarDemanda = formDemanda.querySelector('button[type="submit"]');
+const textoSalvarOriginal = botaoSalvarDemanda.textContent;
+
+// A demanda sempre nasce no Almoxarifado (o servidor define a etapa): esconde o seletor de etapa.
+const seletorEtapa = $('demanda-etapa');
+if (seletorEtapa) {
+  seletorEtapa.disabled = true;
+  const grupo = seletorEtapa.closest('.campo') || seletorEtapa.parentElement;
+  if (grupo && grupo !== formDemanda) grupo.style.display = 'none';
+}
+
+function fecharFormDemanda() {
+  editandoId = null;
+  formDemanda.reset();
+  botaoSalvarDemanda.textContent = textoSalvarOriginal;
+  mostrarForm(formDemanda, false);
+}
+
+function iniciarEdicao(d) {
+  editandoId = d.id;
+  $('demanda-rg').value = d.rg;
+  $('demanda-nome').value = d.nome_material;
+  $('demanda-qtd').value = d.quantidade;
+  botaoSalvarDemanda.textContent = 'Salvar alterações';
+  mostrarForm(formDemanda, true);
+  formDemanda.scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+$('btn-add-demanda').addEventListener('click', function () {
+  if (!formDemanda.hidden) return fecharFormDemanda();
+  editandoId = null;
+  formDemanda.reset();
+  botaoSalvarDemanda.textContent = textoSalvarOriginal;
+  mostrarForm(formDemanda, true);
+});
+$('btn-cancelar-demanda').addEventListener('click', fecharFormDemanda);
+
 formDemanda.addEventListener('submit', async function (evento) {
   evento.preventDefault();
-  const r = await Atenas.api('/api/projetos/' + id + '/demandas', {
-    method: 'POST',
-    body: JSON.stringify({
-      rg: $('demanda-rg').value,
-      nome_material: $('demanda-nome').value,
-      quantidade: $('demanda-qtd').value,
-      etapa_atual: $('demanda-etapa').value,
-    }),
+  const editando = editandoId !== null;
+  const corpo = JSON.stringify({
+    rg: $('demanda-rg').value,
+    nome_material: $('demanda-nome').value,
+    quantidade: $('demanda-qtd').value,
   });
+
+  botaoSalvarDemanda.disabled = true;
+  const r = editando
+    ? await Atenas.api('/api/demandas/' + editandoId, { method: 'PUT', body: corpo })
+    : await Atenas.api('/api/projetos/' + id + '/demandas', { method: 'POST', body: corpo });
+  botaoSalvarDemanda.disabled = false;
+
   if (r.ok) {
-    formDemanda.reset();
-    mostrarForm(formDemanda, false);
-    Atenas.aviso('Demanda criada e enviada para ' + ROTULO_ETAPA[$('demanda-etapa').value] + '.', 'sucesso');
+    fecharFormDemanda();
+    Atenas.aviso(editando ? 'Demanda atualizada.' : 'Demanda criada e enviada para o Almoxarifado.', 'sucesso');
     carregar();
   }
 });
