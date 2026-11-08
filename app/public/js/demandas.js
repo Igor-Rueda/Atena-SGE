@@ -1,22 +1,29 @@
-/* Minhas demandas: as que têm o usuário como responsável, com filtro por status. */
+/* Fila de produção unificada do usuário */
 const el = Atenas.el;
 const lista = document.getElementById('lista-demandas');
 const vazio = document.getElementById('vazio');
 
-const ROTULO_STATUS = { aberta: 'Aberta', em_andamento: 'Em andamento', concluida: 'Concluída' };
+const ROTULO_ETAPA = { almoxarifado: 'Almoxarifado', operacao: 'Operação', montagem: 'Montagem', finalizada: 'Finalizada' };
 
 let todas = [];
-let filtro = 'abertas';
 
-function visivel(d) {
-  if (filtro === 'todas') return true;
-  if (filtro === 'abertas') return d.status !== 'concluida';
-  return d.status === 'concluida';
+async function avancarDemanda(d, botao) {
+  botao.disabled = true;
+  const r = await Atenas.api('/api/demandas/' + d.id + '/avancar', { method: 'PATCH' });
+  if (r.ok) { 
+    Atenas.aviso('Etapa avançada.', 'sucesso'); 
+    carregar(); 
+  } else { 
+    botao.disabled = false; 
+  }
 }
 
 function linha(d) {
   const item = el('div', undefined, 'demanda');
-  item.appendChild(el('span', Atenas.rotuloProcesso(d.atividade), 'etiqueta'));
+  
+  // A query do routes.js mapeou etapa_atual para 'atividade' e 'status'
+  const etapa = d.atividade || d.status; 
+  item.appendChild(el('span', ROTULO_ETAPA[etapa] || etapa, 'etiqueta etiqueta--' + etapa));
 
   const info = el('div', undefined, 'demanda__info');
   info.appendChild(el('strong', d.descricao));
@@ -29,32 +36,34 @@ function linha(d) {
   item.appendChild(info);
 
   const acoes = el('div', undefined, 'demanda__acoes');
-  const select = el('select', undefined, 'select-pequeno');
-  Object.keys(ROTULO_STATUS).forEach(function (valor) {
-    const opcao = el('option', ROTULO_STATUS[valor]);
-    opcao.value = valor;
-    select.appendChild(opcao);
-  });
-  select.value = d.status;
-  select.setAttribute('aria-label', 'Status da demanda');
-  select.addEventListener('change', async function () {
-    const r = await Atenas.api('/api/demandas/' + d.id + '/status', { method: 'PATCH', body: JSON.stringify({ status: select.value }) });
-    if (r.ok) carregar(); else select.value = d.status;
-  });
-  acoes.appendChild(select);
+
+  const cat = Atenas.me ? Atenas.me.categoria : '';
+  const superior = cat === 'superior';
+  let btnTexto = '';
+
+  if (etapa === 'almoxarifado' && (cat === 'almoxarife' || superior)) {
+     btnTexto = 'Repassar para Operação';
+  } else if (etapa === 'operacao' && (cat === 'operador' || superior)) {
+     btnTexto = 'Repassar para Montagem';
+  } else if (etapa === 'montagem' && (cat === 'montador' || superior)) {
+     btnTexto = 'Finalizar Demanda';
+  }
+
+  if (btnTexto) {
+     const btn = el('button', btnTexto, 'botao botao--pequeno');
+     btn.addEventListener('click', function() { avancarDemanda(d, btn); });
+     acoes.appendChild(btn);
+  }
+
   item.appendChild(acoes);
   return item;
 }
 
 function renderizar() {
-  const mostrar = todas.filter(visivel);
   lista.innerHTML = '';
-  mostrar.forEach(function (d) { lista.appendChild(linha(d)); });
-  lista.hidden = mostrar.length === 0;
-  vazio.hidden = mostrar.length > 0;
-  document.getElementById('vazio-texto').textContent = todas.length === 0
-    ? 'Você ainda não tem demandas atribuídas. Elas aparecem aqui quando alguém cria uma para você, ou quando você cria uma para si.'
-    : 'Nenhuma demanda neste filtro.';
+  todas.forEach(function (d) { lista.appendChild(linha(d)); });
+  lista.hidden = todas.length === 0;
+  vazio.hidden = todas.length > 0;
 }
 
 async function carregar() {
@@ -63,13 +72,5 @@ async function carregar() {
   todas = r.dados;
   renderizar();
 }
-
-document.querySelectorAll('[data-filtro]').forEach(function (botao) {
-  botao.addEventListener('click', function () {
-    filtro = botao.dataset.filtro;
-    document.querySelectorAll('[data-filtro]').forEach(function (b) { b.setAttribute('aria-pressed', String(b === botao)); });
-    renderizar();
-  });
-});
 
 Atenas.pronto.then(carregar);
