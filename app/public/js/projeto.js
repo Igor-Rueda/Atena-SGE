@@ -1,12 +1,18 @@
-/* Página de um projeto: dados no topo e fluxo de demandas da produção. */
+/* Página de um projeto: dados no topo e demandas da produção. */
 const el = Atenas.el;
 const id = Number(new URLSearchParams(window.location.search).get('id'));
 
-let estado = null; // { projeto, sou_dono, demandas }
+let estado = null; // { projeto, sou_dono, demandas, excluidas }
 let editandoId = null; // demanda em edição (null = criando)
-let editarPendente = Number(new URLSearchParams(window.location.search).get('editar')) || null; // vindo da fila
+let abaDemandas = 'andamento'; // 'andamento' | 'excluidas' (só o Planejador tem as duas)
 
 const ROTULO_ETAPA = { almoxarifado: 'Almoxarifado', operacao: 'Operação', montagem: 'Montagem', finalizada: 'Finalizada' };
+// processos para onde o Planejador pode destinar uma demanda
+const PROCESSOS_DESTINO = [
+  { valor: 'almoxarifado', rotulo: 'Almoxarifado' },
+  { valor: 'operacao', rotulo: 'Operação' },
+  { valor: 'montagem', rotulo: 'Montagem' },
+];
 
 // Cada etapa só é avançada pela categoria dona dela. O servidor valida de novo.
 const FLUXO = {
@@ -16,8 +22,8 @@ const FLUXO = {
 };
 
 function $(id_str) { return document.getElementById(id_str); }
-
 function categoria() { return Atenas.me ? Atenas.me.categoria : ''; }
+function plural(n, singular, pluralTexto) { return n + ' ' + (n === 1 ? singular : pluralTexto); }
 
 function naoEncontrado() {
   $('carregando').hidden = true;
@@ -45,6 +51,11 @@ function podeAvancar(d) {
 
 function podeGerenciar(d) {
   return categoria() === 'planejador' && d.planejador_id === Atenas.me.usuario_id && d.etapa_atual !== 'finalizada';
+}
+
+// demandas que a Montagem ainda não concluiu
+function pendentes() {
+  return estado.demandas.filter(function (d) { return d.etapa_atual !== 'finalizada'; }).length;
 }
 
 // ---------- ações do Superior sobre o projeto ----------
@@ -125,33 +136,49 @@ btnEditarProjeto.addEventListener('click', async function () {
   if (r.ok) { Atenas.aviso('Projeto atualizado.', 'sucesso'); carregar(); }
 });
 
+// Excluir: se houver demandas não concluídas pela Montagem, o aviso pede confirmação.
 btnExcluirProjeto.addEventListener('click', async function () {
-  const n = estado.demandas.length;
-  const confirmou = await Atenas.modal({
+  const n = pendentes();
+  const total = estado.demandas.length;
+  const confirmou = await Atenas.modal(n > 0 ? {
+    titulo: 'Excluir projeto com demandas em andamento?',
+    texto: plural(n, 'demanda ainda não foi concluída', 'demandas ainda não foram concluídas') +
+      ' pela Montagem. Se continuar, o projeto e todas as ' + plural(total, 'demanda', 'demandas') +
+      ' dele serão excluídos. Essa ação não pode ser desfeita.',
+    confirmar: 'Excluir mesmo assim',
+    perigo: true,
+  } : {
     titulo: 'Excluir projeto?',
     texto: 'O projeto "' + estado.projeto.nome + '" será excluído' +
-      (n > 0 ? ' junto com as ' + n + (n === 1 ? ' demanda dele' : ' demandas dele') : '') +
-      '. Essa ação não pode ser desfeita.',
+      (total > 0 ? ' junto com ' + plural(total, 'demanda', 'demandas') : '') + '. Essa ação não pode ser desfeita.',
     confirmar: 'Excluir projeto',
     perigo: true,
   });
   if (!confirmou) return;
-  const r = await Atenas.api('/api/projetos/' + id, { method: 'DELETE' });
+  const r = await Atenas.api('/api/projetos/' + id + (n > 0 ? '?confirmar=1' : ''), { method: 'DELETE' });
   if (r.ok) { Atenas.aviso('Projeto excluído.', 'sucesso'); window.location.href = 'projetos.html'; }
+  else if (r.status === 409) carregar(); // surgiram demandas novas: recarrega para avisar de novo
 });
 
+// Concluir: sem pergunta de funcionários; com demandas pendentes, o aviso pede confirmação.
 btnConcluir.addEventListener('click', async function () {
-  const valor = await Atenas.modal({
-    titulo: 'Concluir projeto',
-    texto: 'Quantos funcionários foram realmente usados? Esse número ensina a previsão de equipe.',
-    campo: { rotulo: 'Funcionários usados', tipo: 'number', min: 1 },
+  const n = pendentes();
+  const confirmou = await Atenas.modal(n > 0 ? {
+    titulo: 'Concluir projeto com demandas em andamento?',
+    texto: plural(n, 'demanda ainda não foi concluída', 'demandas ainda não foram concluídas') +
+      ' pela Montagem. Se continuar, ' + (n === 1 ? 'ela será encerrada' : 'elas serão encerradas') +
+      ' sem passar pela Montagem.',
+    confirmar: 'Concluir mesmo assim',
+    perigo: true,
+  } : {
+    titulo: 'Concluir projeto?',
+    texto: 'Todas as demandas foram concluídas. O projeto será marcado como concluído e não poderá mais ser editado.',
     confirmar: 'Concluir projeto',
   });
-  if (valor === null) return;
-  const r = await Atenas.api('/api/projetos/' + id + '/concluir', {
-    method: 'PATCH', body: JSON.stringify({ funcionarios_usados: valor }),
-  });
+  if (!confirmou) return;
+  const r = await Atenas.api('/api/projetos/' + id + '/concluir' + (n > 0 ? '?confirmar=1' : ''), { method: 'PATCH' });
   if (r.ok) { Atenas.aviso('Projeto concluído.', 'sucesso'); carregar(); }
+  else if (r.status === 409) carregar(); // surgiram demandas novas: recarrega para avisar de novo
 });
 
 // ---------- topo do projeto ----------
@@ -187,7 +214,7 @@ function renderizarTopo() {
   btnExcluirProjeto.hidden = !superiorDono;
 }
 
-// ---------- fluxo de demandas ----------
+// ---------- demandas ----------
 async function avancarDemanda(demanda, botao) {
   botao.disabled = true;
   const r = await Atenas.api('/api/demandas/' + demanda.id + '/avancar', { method: 'PATCH' });
@@ -196,12 +223,16 @@ async function avancarDemanda(demanda, botao) {
   botao.disabled = false;
 }
 
+function textoDemanda(d) {
+  return d.rg + ' — ' + d.nome_material + ' (Qtd: ' + d.quantidade + ')';
+}
+
 function linhaDemanda(d) {
   const linha = el('div', undefined, 'demanda');
   linha.appendChild(el('span', ROTULO_ETAPA[d.etapa_atual] || d.etapa_atual, 'etiqueta etiqueta--' + d.etapa_atual));
 
   const info = el('div', undefined, 'demanda__info');
-  info.appendChild(el('strong', d.rg + ' — ' + d.nome_material + ' (Qtd: ' + d.quantidade + ')'));
+  info.appendChild(el('strong', textoDemanda(d)));
   linha.appendChild(info);
 
   const acoes = el('div', undefined, 'demanda__acoes');
@@ -242,15 +273,73 @@ function linhaDemanda(d) {
   return linha;
 }
 
+function linhaExcluida(d) {
+  const linha = el('div', undefined, 'demanda');
+  linha.appendChild(el('span', ROTULO_ETAPA[d.etapa_atual] || d.etapa_atual, 'etiqueta etiqueta--' + d.etapa_atual));
+  const info = el('div', undefined, 'demanda__info');
+  info.appendChild(el('strong', textoDemanda(d)));
+  info.appendChild(el('small', 'Excluída em ' + Atenas.formatarData(d.excluida_em)));
+  linha.appendChild(info);
+  return linha;
+}
+
+// abas "Demandas | Excluídas": só o Planejador (que também vê o que excluiu)
+let barraAbas = null;
+let painelExcluidas = null;
+
+function montarAbas() {
+  if (barraAbas) return;
+  const lista = $('lista-demandas-projeto');
+  barraAbas = el('div');
+  barraAbas.style.cssText = 'display:flex;gap:8px;margin-bottom:16px;';
+  [['andamento', 'Demandas'], ['excluidas', 'Excluídas']].forEach(function (par) {
+    const b = el('button', par[1]);
+    b.type = 'button';
+    b.dataset.aba = par[0];
+    b.addEventListener('click', function () { abaDemandas = par[0]; renderizarDemandas(); });
+    barraAbas.appendChild(b);
+  });
+  painelExcluidas = el('div', undefined, lista.className);
+  lista.parentNode.insertBefore(barraAbas, lista);
+  lista.after(painelExcluidas);
+}
+
+function atualizarAbas() {
+  barraAbas.querySelectorAll('button').forEach(function (b) {
+    const ativa = b.dataset.aba === abaDemandas;
+    b.className = 'botao botao--pequeno' + (ativa ? '' : ' botao--secundario');
+    b.setAttribute('aria-pressed', String(ativa));
+    b.textContent = b.dataset.aba === 'excluidas'
+      ? 'Excluídas (' + estado.excluidas.length + ')'
+      : 'Demandas (' + estado.demandas.length + ')';
+  });
+}
+
 function renderizarDemandas() {
   const lista = $('lista-demandas-projeto');
+  const planejador = categoria() === 'planejador';
+  if (planejador) montarAbas();
+  const naExcluidas = planejador && abaDemandas === 'excluidas';
+
   lista.innerHTML = '';
   estado.demandas.forEach(function (d) { lista.appendChild(linhaDemanda(d)); });
+  lista.hidden = naExcluidas;
   $('c-demandas').textContent = estado.demandas.length;
-  $('vazio-demandas').hidden = estado.demandas.length > 0;
+  $('vazio-demandas').hidden = naExcluidas || estado.demandas.length > 0;
+
+  if (planejador) {
+    painelExcluidas.innerHTML = '';
+    if (estado.excluidas.length === 0) {
+      painelExcluidas.appendChild(el('p', 'Nenhuma demanda excluída neste projeto.', 'texto-suave'));
+    } else {
+      estado.excluidas.forEach(function (d) { painelExcluidas.appendChild(linhaExcluida(d)); });
+    }
+    painelExcluidas.hidden = !naExcluidas;
+    atualizarAbas();
+  }
 
   // Só o Planejador cadastra demandas
-  $('btn-add-demanda').hidden = !(categoria() === 'planejador' && estado.projeto.status === 'ativo');
+  $('btn-add-demanda').hidden = !(planejador && estado.projeto.status === 'ativo') || naExcluidas;
 }
 
 function renderizar() {
@@ -258,13 +347,6 @@ function renderizar() {
   $('conteudo-projeto').hidden = false;
   renderizarTopo();
   renderizarDemandas();
-
-  // veio da fila com ?editar=ID: abre o formulário já preenchido
-  if (editarPendente) {
-    const alvo = estado.demandas.find(function (d) { return d.id === editarPendente; });
-    editarPendente = null;
-    if (alvo && podeGerenciar(alvo)) iniciarEdicao(alvo);
-  }
 }
 
 // ---------- formulário de demanda (criar e editar) ----------
@@ -277,12 +359,19 @@ const formDemanda = $('form-demanda');
 const botaoSalvarDemanda = formDemanda.querySelector('button[type="submit"]');
 const textoSalvarOriginal = botaoSalvarDemanda.textContent;
 
-// A demanda sempre nasce no Almoxarifado (o servidor define a etapa): esconde o seletor de etapa.
+// Seletor de processo: o Planejador destina a demanda ao cadastrar ou editar (padrão: Almoxarifado)
 const seletorEtapa = $('demanda-etapa');
 if (seletorEtapa) {
-  seletorEtapa.disabled = true;
-  const grupo = seletorEtapa.closest('.campo') || seletorEtapa.parentElement;
-  if (grupo && grupo !== formDemanda) grupo.style.display = 'none';
+  seletorEtapa.innerHTML = '';
+  PROCESSOS_DESTINO.forEach(function (p) {
+    const opcao = document.createElement('option');
+    opcao.value = p.valor;
+    opcao.textContent = p.rotulo;
+    seletorEtapa.appendChild(opcao);
+  });
+  seletorEtapa.disabled = false;
+  const rotuloEtapa = document.querySelector('label[for="demanda-etapa"]');
+  if (rotuloEtapa) rotuloEtapa.textContent = 'Processo';
 }
 
 function fecharFormDemanda() {
@@ -297,6 +386,7 @@ function iniciarEdicao(d) {
   $('demanda-rg').value = d.rg;
   $('demanda-nome').value = d.nome_material;
   $('demanda-qtd').value = d.quantidade;
+  if (seletorEtapa) seletorEtapa.value = d.etapa_atual;
   botaoSalvarDemanda.textContent = 'Salvar alterações';
   mostrarForm(formDemanda, true);
   formDemanda.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -314,10 +404,12 @@ $('btn-cancelar-demanda').addEventListener('click', fecharFormDemanda);
 formDemanda.addEventListener('submit', async function (evento) {
   evento.preventDefault();
   const editando = editandoId !== null;
+  const etapa = seletorEtapa ? seletorEtapa.value : 'almoxarifado';
   const corpo = JSON.stringify({
     rg: $('demanda-rg').value,
     nome_material: $('demanda-nome').value,
     quantidade: $('demanda-qtd').value,
+    etapa_atual: etapa,
   });
 
   botaoSalvarDemanda.disabled = true;
@@ -328,7 +420,10 @@ formDemanda.addEventListener('submit', async function (evento) {
 
   if (r.ok) {
     fecharFormDemanda();
-    Atenas.aviso(editando ? 'Demanda atualizada.' : 'Demanda criada e enviada para o Almoxarifado.', 'sucesso');
+    Atenas.aviso(
+      editando ? 'Demanda atualizada.' : 'Demanda criada e enviada para ' + ROTULO_ETAPA[etapa] + '.',
+      'sucesso'
+    );
     carregar();
   }
 });

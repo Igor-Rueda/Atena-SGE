@@ -232,6 +232,8 @@
       const link = el('a', undefined, 'menu__link');
       link.href = item.href;
       link.dataset.item = item.id;
+      // "Minhas demandas" começa escondido: Superior e Planejador nunca o veem (evita piscar na carga)
+      if (item.id === 'demandas') link.style.display = 'none';
       link.innerHTML = icone(item.icone, 19) + '<span></span>';
       link.querySelector('span').textContent = item.rotulo;
       if (item.expert) {
@@ -314,9 +316,9 @@
     }
     const cadeado = document.getElementById('menu-cadeado');
     if (cadeado) cadeado.hidden = me.role !== 'professional';
-    // O Superior supervisiona projetos e não tem fila de demandas: o item some do menu
+    // Só Almoxarife, Operador e Montador têm fila: Superior e Planejador trabalham pela página do projeto
     const linkDemandas = document.querySelector('.menu__link[data-item="demandas"]');
-    if (linkDemandas) linkDemandas.style.display = me.categoria === 'superior' ? 'none' : '';
+    if (linkDemandas) linkDemandas.style.display = (me.categoria === 'superior' || me.categoria === 'planejador') ? 'none' : '';
   }
 
   montarCasca();
