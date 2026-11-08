@@ -8,7 +8,6 @@ let previa = null;    // resposta de /previa: { colunas, previa, total_linhas, d
 let papeis = {};      // nome da coluna -> 'alvo' | 'entrada' | 'ignorar'
 let modelo = null;    // modelo treinado do usuário (ou null)
 let etapa = 'dados';  // 'dados' | 'colunas'
-let cargaCarregada = false;
 
 const esperar = function (ms) { return new Promise(function (resolver) { setTimeout(resolver, ms); }); };
 const $ = function (id) { return document.getElementById(id); };
@@ -22,18 +21,13 @@ function numero(valor, casas) {
   return Number(valor).toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: casas === undefined ? 2 : casas });
 }
 
-// ---------- abas ----------
+// ---------- aba ----------
 function mostrarAba(nome) {
   document.querySelectorAll('[data-aba]').forEach(function (botao) {
     botao.setAttribute('aria-pressed', String(botao.dataset.aba === nome));
   });
   $('aba-previsao').hidden = nome !== 'previsao';
-  $('aba-carga').hidden = nome !== 'carga';
-  if (nome === 'carga' && !cargaCarregada) carregarCarga();
 }
-document.querySelectorAll('[data-aba]').forEach(function (botao) {
-  botao.addEventListener('click', function () { mostrarAba(botao.dataset.aba); });
-});
 
 // ---------- estado de carregamento ----------
 function setCarregando(mostrar, texto) {
@@ -363,39 +357,6 @@ async function carregarModelo() {
     if (r.status !== 404) Atenas.aviso(r.dados.mensagem || 'Não foi possível consultar o modelo agora.');
   }
   renderizarModelo();
-}
-
-// ---------- carga da equipe ----------
-function barras(raiz, linhas, rotuloDe, valorDe, alertaDe) {
-  raiz.innerHTML = '';
-  if (linhas.length === 0) { raiz.appendChild(el('p', 'Sem dados ainda.', 'texto-suave sem-margem')); return; }
-  const maximo = Math.max.apply(null, [1].concat(linhas.map(valorDe)));
-  linhas.forEach(function (linha) {
-    const bloco = el('div', undefined, 'barra-linha');
-    const topo = el('div', undefined, 'barra-linha__rotulo');
-    topo.append(el('span', rotuloDe(linha)), el('strong', String(valorDe(linha))));
-    const trilho = el('div', undefined, 'barra-trilho');
-    const barra = el('div', undefined, 'barra' + (alertaDe(linha) ? ' barra--alerta' : ''));
-    barra.style.width = Math.max(4, (valorDe(linha) / maximo) * 100) + '%';
-    trilho.appendChild(barra);
-    bloco.append(topo, trilho);
-    raiz.appendChild(bloco);
-  });
-}
-
-async function carregarCarga() {
-  const r = await Atenas.api('/api/indicadores');
-  if (!r.ok) return;
-  cargaCarregada = true;
-  const carga = r.dados.carga;
-  const media = carga.length ? carga.reduce(function (s, c) { return s + c.demandas_abertas; }, 0) / carga.length : 0;
-  // sobrecarga: bem acima da média da equipe (e com mais de 2 demandas abertas)
-  barras($('lista-carga'), carga,
-    function (c) { return c.nome; }, function (c) { return c.demandas_abertas; },
-    function (c) { return carga.length > 1 && c.demandas_abertas > media * 1.5 && c.demandas_abertas > 2; });
-  barras($('lista-processos'), r.dados.por_atividade,
-    function (a) { return Atenas.rotuloProcesso(a.atividade); }, function (a) { return a.abertas; }, function () { return false; });
-  $('resumo-projetos').textContent = 'Projetos ativos: ' + r.dados.projetos.ativos + ' · concluídos: ' + r.dados.projetos.concluidos;
 }
 
 // ---------- início ----------
