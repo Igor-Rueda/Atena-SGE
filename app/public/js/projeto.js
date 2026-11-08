@@ -8,7 +8,7 @@ let editarPendente = Number(new URLSearchParams(window.location.search).get('edi
 
 const ROTULO_ETAPA = { almoxarifado: 'Almoxarifado', operacao: 'Operação', montagem: 'Montagem', finalizada: 'Finalizada' };
 
-// Cada etapa só é avançada pela categoria dona dela (ou pelo Superior). O servidor valida de novo.
+// Cada etapa só é avançada pela categoria dona dela. O servidor valida de novo.
 const FLUXO = {
   almoxarifado: { categoria: 'almoxarife', texto: 'Concluir e enviar para Operação' },
   operacao:     { categoria: 'operador',   texto: 'Concluir e enviar para Montagem' },
@@ -16,6 +16,8 @@ const FLUXO = {
 };
 
 function $(id_str) { return document.getElementById(id_str); }
+
+function categoria() { return Atenas.me ? Atenas.me.categoria : ''; }
 
 function naoEncontrado() {
   $('carregando').hidden = true;
@@ -38,16 +40,119 @@ async function carregar() {
 // ---------- permissões (espelham as do servidor, que é quem decide) ----------
 function podeAvancar(d) {
   const regra = FLUXO[d.etapa_atual];
-  if (!regra || !Atenas.me) return false;
-  return Atenas.me.categoria === regra.categoria || Atenas.me.categoria === 'superior';
+  return !!regra && categoria() === regra.categoria;
 }
 
 function podeGerenciar(d) {
-  const me = Atenas.me;
-  if (!me || d.etapa_atual === 'finalizada') return false;
-  if (me.role === 'admin' || me.categoria === 'superior') return true;
-  return me.categoria === 'planejador' && (d.planejador_id === me.usuario_id || estado.sou_dono);
+  return categoria() === 'planejador' && d.planejador_id === Atenas.me.usuario_id && d.etapa_atual !== 'finalizada';
 }
+
+// ---------- ações do Superior sobre o projeto ----------
+const btnConcluir = $('btn-concluir');
+const btnEditarProjeto = el('button', 'Editar projeto', 'botao botao--secundario');
+const btnExcluirProjeto = el('button', 'Excluir projeto', 'botao botao--perigo');
+btnEditarProjeto.type = 'button';
+btnExcluirProjeto.type = 'button';
+btnEditarProjeto.hidden = true;
+btnExcluirProjeto.hidden = true;
+btnConcluir.before(btnEditarProjeto, btnExcluirProjeto);
+
+// Diálogo com os três campos do projeto (o Atenas.modal só tem um campo).
+function dialogoProjeto(p) {
+  return new Promise(function (resolver) {
+    const fundo = el('div', undefined, 'modal');
+    const caixa = el('div', undefined, 'modal__caixa');
+    caixa.setAttribute('role', 'dialog');
+    caixa.setAttribute('aria-modal', 'true');
+    caixa.appendChild(el('h2', 'Editar projeto'));
+
+    function campo(rotulo, entrada, idCampo) {
+      const grupo = el('div', undefined, 'campo');
+      const label = el('label', rotulo);
+      entrada.id = idCampo;
+      label.htmlFor = idCampo;
+      grupo.append(label, entrada);
+      caixa.appendChild(grupo);
+    }
+
+    const nome = document.createElement('input');
+    nome.type = 'text';
+    nome.maxLength = 150;
+    nome.value = p.nome;
+    const descricao = document.createElement('textarea');
+    descricao.rows = 3;
+    descricao.value = p.descricao || '';
+    const prazo = document.createElement('input');
+    prazo.type = 'number';
+    prazo.min = '1';
+    prazo.step = '1';
+    prazo.value = p.prazo_dias || '';
+    campo('Nome', nome, 'editar-projeto-nome');
+    campo('Descrição', descricao, 'editar-projeto-descricao');
+    campo('Prazo (dias)', prazo, 'editar-projeto-prazo');
+
+    const acoes = el('div', undefined, 'modal__acoes');
+    const cancelar = el('button', 'Cancelar', 'botao botao--secundario');
+    const salvar = el('button', 'Salvar', 'botao');
+    cancelar.type = 'button';
+    salvar.type = 'button';
+    acoes.append(cancelar, salvar);
+    caixa.appendChild(acoes);
+    fundo.appendChild(caixa);
+    document.body.appendChild(fundo);
+
+    function fechar(valor) {
+      document.removeEventListener('keydown', teclas);
+      fundo.remove();
+      resolver(valor);
+    }
+    function teclas(e) { if (e.key === 'Escape') fechar(null); }
+    cancelar.addEventListener('click', function () { fechar(null); });
+    fundo.addEventListener('click', function (e) { if (e.target === fundo) fechar(null); });
+    salvar.addEventListener('click', function () {
+      if (!nome.value.trim()) { nome.focus(); return; }
+      fechar({ nome: nome.value, descricao: descricao.value, prazo_dias: prazo.value });
+    });
+    document.addEventListener('keydown', teclas);
+    nome.focus();
+  });
+}
+
+btnEditarProjeto.addEventListener('click', async function () {
+  const dados = await dialogoProjeto(estado.projeto);
+  if (!dados) return;
+  const r = await Atenas.api('/api/projetos/' + id, { method: 'PUT', body: JSON.stringify(dados) });
+  if (r.ok) { Atenas.aviso('Projeto atualizado.', 'sucesso'); carregar(); }
+});
+
+btnExcluirProjeto.addEventListener('click', async function () {
+  const n = estado.demandas.length;
+  const confirmou = await Atenas.modal({
+    titulo: 'Excluir projeto?',
+    texto: 'O projeto "' + estado.projeto.nome + '" será excluído' +
+      (n > 0 ? ' junto com as ' + n + (n === 1 ? ' demanda dele' : ' demandas dele') : '') +
+      '. Essa ação não pode ser desfeita.',
+    confirmar: 'Excluir projeto',
+    perigo: true,
+  });
+  if (!confirmou) return;
+  const r = await Atenas.api('/api/projetos/' + id, { method: 'DELETE' });
+  if (r.ok) { Atenas.aviso('Projeto excluído.', 'sucesso'); window.location.href = 'projetos.html'; }
+});
+
+btnConcluir.addEventListener('click', async function () {
+  const valor = await Atenas.modal({
+    titulo: 'Concluir projeto',
+    texto: 'Quantos funcionários foram realmente usados? Esse número ensina a previsão de equipe.',
+    campo: { rotulo: 'Funcionários usados', tipo: 'number', min: 1 },
+    confirmar: 'Concluir projeto',
+  });
+  if (valor === null) return;
+  const r = await Atenas.api('/api/projetos/' + id + '/concluir', {
+    method: 'PATCH', body: JSON.stringify({ funcionarios_usados: valor }),
+  });
+  if (r.ok) { Atenas.aviso('Projeto concluído.', 'sucesso'); carregar(); }
+});
 
 // ---------- topo do projeto ----------
 function renderizarTopo() {
@@ -75,7 +180,11 @@ function renderizarTopo() {
   $('d-finalizadas').textContent = finalizadas + ' de ' + totalQtd;
   $('d-equipe').textContent = p.funcionarios_usados ? p.funcionarios_usados : '—';
 
-  $('btn-concluir').hidden = !(estado.sou_dono && ativo);
+  // Só o Superior dono do projeto edita, exclui e conclui
+  const superiorDono = estado.sou_dono && categoria() === 'superior';
+  btnConcluir.hidden = !(superiorDono && ativo);
+  btnEditarProjeto.hidden = !(superiorDono && ativo);
+  btnExcluirProjeto.hidden = !superiorDono;
 }
 
 // ---------- fluxo de demandas ----------
@@ -120,11 +229,11 @@ function linhaDemanda(d) {
     apagar.innerHTML = Atenas.icone('lixeira', 17);
     apagar.addEventListener('click', async function () {
       const confirmou = await Atenas.modal({
-        titulo: 'Excluir demanda?', texto: 'Essa ação não pode ser desfeita.', confirmar: 'Excluir', perigo: true,
+        titulo: 'Excluir demanda?', texto: 'Ela será movida para a aba Excluídas.', confirmar: 'Excluir', perigo: true,
       });
       if (!confirmou) return;
       const r = await Atenas.api('/api/demandas/' + d.id, { method: 'DELETE' });
-      if (r.ok) { Atenas.aviso('Demanda excluída.', 'sucesso'); carregar(); }
+      if (r.ok) { Atenas.aviso('Demanda movida para Excluídas.', 'sucesso'); carregar(); }
     });
     acoes.appendChild(apagar);
   }
@@ -140,9 +249,8 @@ function renderizarDemandas() {
   $('c-demandas').textContent = estado.demandas.length;
   $('vazio-demandas').hidden = estado.demandas.length > 0;
 
-  // Somente planejador e superior podem criar
-  const podeCriar = (Atenas.me && (Atenas.me.categoria === 'planejador' || Atenas.me.categoria === 'superior')) && estado.projeto.status === 'ativo';
-  $('btn-add-demanda').hidden = !podeCriar;
+  // Só o Planejador cadastra demandas
+  $('btn-add-demanda').hidden = !(categoria() === 'planejador' && estado.projeto.status === 'ativo');
 }
 
 function renderizar() {
@@ -223,20 +331,6 @@ formDemanda.addEventListener('submit', async function (evento) {
     Atenas.aviso(editando ? 'Demanda atualizada.' : 'Demanda criada e enviada para o Almoxarifado.', 'sucesso');
     carregar();
   }
-});
-
-$('btn-concluir').addEventListener('click', async function () {
-  const valor = await Atenas.modal({
-    titulo: 'Concluir projeto',
-    texto: 'Quantos funcionários foram realmente usados? Esse número ensina a previsão de equipe.',
-    campo: { rotulo: 'Funcionários usados', tipo: 'number', min: 1 },
-    confirmar: 'Concluir projeto',
-  });
-  if (valor === null) return;
-  const r = await Atenas.api('/api/projetos/' + id + '/concluir', {
-    method: 'PATCH', body: JSON.stringify({ funcionarios_usados: valor }),
-  });
-  if (r.ok) { Atenas.aviso('Projeto concluído.', 'sucesso'); carregar(); }
 });
 
 Atenas.pronto.then(function () {

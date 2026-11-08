@@ -314,6 +314,9 @@
     }
     const cadeado = document.getElementById('menu-cadeado');
     if (cadeado) cadeado.hidden = me.role !== 'professional';
+    // O Superior supervisiona projetos e não tem fila de demandas: o item some do menu
+    const linkDemandas = document.querySelector('.menu__link[data-item="demandas"]');
+    if (linkDemandas) linkDemandas.style.display = me.categoria === 'superior' ? 'none' : '';
   }
 
   montarCasca();

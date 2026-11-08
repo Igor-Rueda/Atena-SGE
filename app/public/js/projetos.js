@@ -7,6 +7,10 @@ const form = document.getElementById('form-projeto');
 let todos = [];
 let filtro = 'todos';
 
+function ehSuperior() {
+  return !!Atenas.me && Atenas.me.categoria === 'superior';
+}
+
 function cartao(p) {
   const a = el('a', undefined, 'projeto-card');
   a.href = 'projeto.html?id=' + p.id;
@@ -40,7 +44,9 @@ function renderizar() {
   lista.hidden = visiveis.length === 0;
   if (visiveis.length === 0) {
     document.getElementById('vazio-texto').textContent = todos.length === 0
-      ? 'Crie o primeiro projeto para começar a gerenciar sua fila de produção.'
+      ? (ehSuperior()
+          ? 'Crie o primeiro projeto para começar a gerenciar sua fila de produção.'
+          : 'Ainda não há projetos. O Superior cadastra os projetos.')
       : 'Nenhum projeto neste filtro.';
   }
 }
@@ -86,4 +92,11 @@ form.addEventListener('submit', async function (evento) {
   if (r.ok) window.location.href = 'projeto.html?id=' + r.dados.id; // já abre o projeto novo
 });
 
-Atenas.pronto.then(carregar);
+Atenas.pronto.then(function () {
+  // Só o Superior cadastra projetos
+  const podeCriar = ehSuperior();
+  document.getElementById('btn-novo').hidden = !podeCriar;
+  document.getElementById('btn-vazio-novo').hidden = !podeCriar;
+  if (!podeCriar) form.hidden = true;
+  carregar();
+});
