@@ -9,6 +9,7 @@
   <link rel="stylesheet" href="css/componentes.css">
   <link rel="stylesheet" href="css/layout.css">
   <link rel="stylesheet" href="css/paginas/analise.css">
+  <link rel="stylesheet" href="css/paginas/indicadores.css">
 </head>
 <body data-pagina="analise">
   <main>
@@ -22,7 +23,7 @@
     <section id="bloqueio" class="cartao bloqueio" hidden>
       <span class="icone-caixa"><span data-icone="cadeado"></span></span>
       <h2>Recurso do plano Expert</h2>
-      <p class="texto-suave">A análise (previsão de equipe) faz parte do plano Expert.</p>
+      <p class="texto-suave">A análise (previsão de equipe e indicadores) faz parte do plano Expert.</p>
       <a class="botao" href="planos.html">Ver planos</a>
     </section>
 
@@ -30,6 +31,7 @@
       <div class="barra-abas">
         <div class="segmentos" role="group" aria-label="Funcionalidades da análise">
           <button type="button" data-aba="previsao" aria-pressed="true">Previsão de equipe</button>
+          <button type="button" data-aba="indicadores" aria-pressed="false">Indicadores</button>
         </div>
       </div>
 
@@ -136,10 +138,49 @@
           </div>
         </section>
       </section>
+
+      <!-- ================= Indicadores ================= -->
+      <section id="aba-indicadores" class="pilha" hidden>
+        <div class="ind-so-impressao">
+          <strong>Atenas SGE — Indicadores</strong>
+          <span id="ind-emissao"></span>
+        </div>
+
+        <div class="ind-topo">
+          <p class="texto-suave sem-margem">Demandas por processo e andamento geral da produção.</p>
+          <button type="button" class="botao botao--secundario nao-imprimir" id="ind-imprimir" hidden>
+            <span data-icone="impressora" data-tamanho="18"></span>
+            <span>Imprimir</span>
+          </button>
+        </div>
+
+        <p id="ind-carregando" class="texto-suave">Carregando…</p>
+
+        <section id="ind-vazio" class="cartao" hidden>
+          <h2>Ainda não há demandas para analisar</h2>
+          <p class="texto-suave">Os gráficos aparecem assim que o Planejador cadastrar demandas nos projetos.</p>
+          <a class="botao" href="projetos.html">Ir para os projetos</a>
+        </section>
+
+        <div id="ind-conteudo" class="ind-grade" hidden>
+          <article class="cartao">
+            <h2>Demandas por processo</h2>
+            <p class="texto-suave" id="ind-resumo-barras"></p>
+            <div id="ind-barras"></div>
+          </article>
+
+          <article class="cartao">
+            <h2>Concluídas × Pendentes</h2>
+            <p class="texto-suave" id="ind-resumo-pizza"></p>
+            <div id="ind-pizza"></div>
+          </article>
+        </div>
+      </section>
     </div>
   </main>
 
   <script src="js/layout.js"></script>
   <script src="js/analise.js"></script>
+  <script src="js/indicadores.js"></script>
 </body>
 </html>

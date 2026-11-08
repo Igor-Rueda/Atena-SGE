@@ -35,6 +35,7 @@
     lapis: '<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/>',
     busca: '<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>',
     check: '<path d="m5 12.5 4.5 4.5L19 7.5"/>',
+    impressora: '<path d="M7 9V3h10v6"/><path d="M7 17H5a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2h-2"/><rect x="7" y="14" width="10" height="7" rx="1"/>',
   };
 
   function icone(nome, tamanho) {
@@ -238,7 +239,6 @@
       link.querySelector('span').textContent = item.rotulo;
       if (item.expert) {
         const cadeado = el('span', undefined, 'menu__cadeado');
-        cadeado.id = 'menu-cadeado';
         cadeado.hidden = true;
         cadeado.title = 'Recurso do plano Expert';
         cadeado.innerHTML = icone('cadeado', 15);
@@ -314,8 +314,9 @@
       papelEl.textContent = rotuloPapel(me.role);
       if (me.role === 'expert' || me.role === 'admin') papelEl.classList.add('etiqueta--expert');
     }
-    const cadeado = document.getElementById('menu-cadeado');
-    if (cadeado) cadeado.hidden = me.role !== 'professional';
+    document.querySelectorAll('.menu__cadeado').forEach(function (cadeado) {
+      cadeado.hidden = me.role !== 'professional';
+    });
     // Só Almoxarife, Operador e Montador têm fila: Superior e Planejador trabalham pela página do projeto
     const linkDemandas = document.querySelector('.menu__link[data-item="demandas"]');
     if (linkDemandas) linkDemandas.style.display = (me.categoria === 'superior' || me.categoria === 'planejador') ? 'none' : '';

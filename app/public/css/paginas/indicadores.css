@@ -1,0 +1,65 @@
+/* Aba Indicadores da página Análise: gráficos em SVG e estilo de impressão.
+   Todas as classes começam com "ind-" para não colidir com o analise.css (que já usa .barra e .grafico). */
+#aba-previsao[hidden], #aba-indicadores[hidden] { display: none !important; }
+
+#aba-indicadores {
+  --ind-escuro: #8a5a2b;   /* bronze escuro */
+  --ind-medio: #b8864b;    /* bronze */
+  --ind-claro: #dcc7a1;    /* bege */
+  --ind-linha: rgba(0, 0, 0, 0.12);
+}
+
+.ind-topo { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+
+.ind-grade { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 20px; }
+.ind-grade .cartao h2 { margin: 0 0 4px; }
+
+/* gráficos */
+.ind-grafico { display: block; width: 100%; height: auto; max-height: 340px; }
+.ind-grafico--pizza { max-width: 260px; margin: 0 auto; }
+.ind-linha-grade { stroke: var(--ind-linha); stroke-width: 1; }
+.ind-eixo { font-size: 11px; fill: currentColor; opacity: 0.7; }
+.ind-rotulo { font-size: 13px; fill: currentColor; }
+.ind-valor { font-size: 14px; font-weight: 700; fill: currentColor; }
+.ind-pct { font-size: 15px; font-weight: 700; }
+.ind-pct--concluidas { fill: #fff; }
+.ind-pct--pendentes { fill: #3b2a14; }
+
+.ind-barra--almoxarifado { fill: var(--ind-claro); stroke: var(--ind-medio); stroke-width: 1; }
+.ind-barra--operacao { fill: var(--ind-medio); }
+.ind-barra--montagem { fill: var(--ind-escuro); }
+
+.ind-fatia { stroke: #fff; stroke-width: 2; }
+.ind-fatia--concluidas { fill: var(--ind-escuro); }
+.ind-fatia--pendentes { fill: var(--ind-claro); }
+
+.ind-legenda { list-style: none; margin: 16px 0 0; padding: 0; display: grid; gap: 6px; font-size: 0.92rem; }
+.ind-legenda li { display: flex; align-items: center; gap: 8px; }
+.ind-legenda__cor { width: 14px; height: 14px; border-radius: 3px; flex: none; }
+.ind-legenda__cor--concluidas { background: var(--ind-escuro); }
+.ind-legenda__cor--pendentes { background: var(--ind-claro); border: 1px solid var(--ind-medio); }
+
+/* cabeçalho que só aparece na impressão */
+.ind-so-impressao { display: none; }
+
+@media print {
+  @page { margin: 16mm; }
+
+  /* some o menu e tudo o que não faz parte do relatório */
+  .menu, .menu-fundo, .topo-mobile, .nao-imprimir, .avisos, .modal { display: none !important; }
+  .app { display: block !important; }
+  .principal, .conteudo { margin: 0 !important; padding: 0 !important; width: 100% !important; max-width: none !important; }
+  body { background: #fff !important; color: #000 !important; }
+
+  /* imprimindo a aba Indicadores: só o relatório */
+  body.aba-indicadores .pagina-cabecalho,
+  body.aba-indicadores .barra-abas,
+  body.aba-indicadores .ind-topo p { display: none !important; }
+  .ind-so-impressao { display: flex; flex-direction: column; gap: 2px; margin-bottom: 16px; padding-bottom: 8px; border-bottom: 2px solid #000; }
+
+  .ind-grade { display: block; }
+  .ind-grade .cartao { break-inside: avoid; page-break-inside: avoid; margin-bottom: 16px; border: 1px solid #999; }
+
+  /* garante que as cores dos gráficos saiam no papel */
+  * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+}

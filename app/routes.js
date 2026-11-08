@@ -724,30 +724,49 @@ router.patch('/demandas/:id/avancar', exigirLogin, limitadorEscrita, async (req,
 // ---------- INDICADORES, REGRESSÃO, PERFIL, etc ----------
 // Mantidos sem alterações
 
+// Indicadores (plano Expert): demandas por processo e concluídas x pendentes.
+// O admin vê tudo; os demais veem as demandas dos projetos que criaram ou que eles mesmos cadastraram.
+// Demandas excluídas não contam. "Pendentes" = as que ainda estão em algum processo (não finalizadas).
+const PROCESSOS_INDICADORES = [
+  { processo: 'almoxarifado', rotulo: 'Almoxarifado' },
+  { processo: 'operacao', rotulo: 'Operação' },
+  { processo: 'montagem', rotulo: 'Montagem' }
+]
+
 router.get('/indicadores', exigirLogin, exigirNivel('expert'), async (req, res) => {
   try {
     const admin = ehAdmin(req)
-    const filtro = admin ? '' : 'AND p.criado_por = ?'
-    const params = admin ? [] : [req.usuario.usuario_id]
+    const uid = req.usuario.usuario_id
 
-    const [porAtividade] = await db.query(
-      `SELECT d.etapa_atual AS atividade, COUNT(*) AS total
+    const [porEtapa] = await db.query(
+      `SELECT d.etapa_atual AS etapa, COUNT(*) AS total
          FROM demandas d JOIN projetos p ON p.id = d.projeto_id
-        WHERE d.excluida_em IS NULL ${filtro}
+        WHERE d.excluida_em IS NULL ${admin ? '' : 'AND (p.criado_por = ? OR d.planejador_id = ?)'}
         GROUP BY d.etapa_atual`,
-      params
+      admin ? [] : [uid, uid]
     )
+    const contagem = {}
+    porEtapa.forEach(l => { contagem[l.etapa] = Number(l.total) })
+
+    const por_processo = PROCESSOS_INDICADORES.map(p => ({ ...p, total: contagem[p.processo] || 0 }))
+    const concluidas = contagem.finalizada || 0
+    const pendentes = por_processo.reduce((soma, p) => soma + p.total, 0)
 
     const [[projetos]] = await db.query(
       `SELECT SUM(p.status = 'ativo') AS ativos, SUM(p.status = 'concluido') AS concluidos
-         FROM projetos p WHERE 1 = 1 ${filtro}`,
-      params
+         FROM projetos p WHERE 1 = 1 ${admin ? '' : 'AND p.criado_por = ?'}`,
+      admin ? [] : [uid]
     )
 
     res.json({
-      carga: [], // Depreciado com o novo formato de filas unificadas, mas mantido pra nao quebrar front antigo
-      por_atividade: porAtividade.map(l => ({ ...l, abertas: Number(l.total) })),
-      projetos: { ativos: Number(projetos.ativos || 0), concluidos: Number(projetos.concluidos || 0) }
+      por_processo,
+      concluidas,
+      pendentes,
+      total: concluidas + pendentes,
+      projetos: { ativos: Number(projetos.ativos || 0), concluidos: Number(projetos.concluidos || 0) },
+      // campos antigos, mantidos para não quebrar telas que ainda os leiam
+      carga: [],
+      por_atividade: porEtapa.map(l => ({ atividade: l.etapa, total: Number(l.total), abertas: Number(l.total) }))
     })
   } catch (err) {
     console.error(err)
