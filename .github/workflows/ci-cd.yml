@@ -78,11 +78,13 @@ jobs:
         run: |
           EMAIL="ci-teste-$(date +%s)@exemplo.com"
           SENHA="senha123456"
+          EMPRESA="CI Empresa Teste $(date +%s)"
 
-          echo "Cadastrando usuário de teste ($EMAIL)..."
+          # O cadastro exige empresa. A categoria "superior" cria a empresa (nome único).
+          echo "Cadastrando usuário de teste ($EMAIL, empresa: $EMPRESA)..."
           STATUS_CADASTRO=$(curl -s -o /tmp/cadastro.json -w "%{http_code}" -X POST http://localhost:3000/api/auth/cadastro \
             -H "Content-Type: application/json" \
-            -d "{\"nome\":\"CI Teste\",\"email\":\"$EMAIL\",\"senha\":\"$SENHA\"}")
+            -d "{\"nome\":\"CI Teste\",\"email\":\"$EMAIL\",\"senha\":\"$SENHA\",\"empresa\":\"$EMPRESA\",\"categoria\":\"superior\"}")
 
           echo "Status HTTP do cadastro: $STATUS_CADASTRO"
           cat /tmp/cadastro.json
@@ -158,9 +160,10 @@ jobs:
           echo "5) Renovação de token (cadastro -> login -> renovar)..."
           EMAIL="ci-pagamentos-$(date +%s)@exemplo.com"
           SENHA="senha123456"
+          EMPRESA="CI Empresa Pagamentos $(date +%s)"
           STATUS=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$URL/api/auth/cadastro" \
             -H "Content-Type: application/json" \
-            -d "{\"nome\":\"CI Pagamentos\",\"email\":\"$EMAIL\",\"senha\":\"$SENHA\"}")
+            -d "{\"nome\":\"CI Pagamentos\",\"email\":\"$EMAIL\",\"senha\":\"$SENHA\",\"empresa\":\"$EMPRESA\",\"categoria\":\"superior\"}")
           [ "$STATUS" = "201" ] || falhar "cadastro do usuário de teste falhou (status $STATUS)"
 
           STATUS=$(curl -s -D /tmp/login-headers.txt -o /dev/null -w "%{http_code}" -X POST "$URL/api/auth/login" \
@@ -181,6 +184,101 @@ jobs:
 
           echo ""
           echo "Pagamentos OK -- webhook, checkout protegido e renovação de token funcionando."
+
+      # Isolamento entre empresas (multi-tenancy): duas empresas, e a B tenta mexer no que é da A.
+      # Tudo que é da outra empresa deve responder 404 (e não 403, para não revelar que existe).
+      # ATENÇÃO: o login do auth-service aceita 5 tentativas por 15 min por IP, e no CI todas vêm do mesmo
+      # IP. Os passos de teste já usam 2 logins e este usa mais 2. Se criar outro passo com login, ajuste o limite.
+      - name: Testar isolamento entre empresas
+        run: |
+          falhar() { echo ""; echo "FALHOU: $1 -- pipeline quebrado."; exit 1; }
+
+          URL="http://localhost:3000"
+          SENHA="senha123456"
+          TS=$(date +%s)
+          EMAIL_A="ci-iso-a-$TS@exemplo.com"
+          EMAIL_B="ci-iso-b-$TS@exemplo.com"
+          EMPRESA_A="CI Isolamento A $TS"
+          EMPRESA_B="CI Isolamento B $TS"
+
+          echo "1) Cadastro do Superior de cada empresa (esperado 201)..."
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$URL/api/auth/cadastro" \
+            -H "Content-Type: application/json" \
+            -d "{\"nome\":\"Superior A\",\"email\":\"$EMAIL_A\",\"senha\":\"$SENHA\",\"empresa\":\"$EMPRESA_A\",\"categoria\":\"superior\"}")
+          [ "$STATUS" = "201" ] || falhar "cadastro do Superior A (status $STATUS)"
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$URL/api/auth/cadastro" \
+            -H "Content-Type: application/json" \
+            -d "{\"nome\":\"Superior B\",\"email\":\"$EMAIL_B\",\"senha\":\"$SENHA\",\"empresa\":\"$EMPRESA_B\",\"categoria\":\"superior\"}")
+          [ "$STATUS" = "201" ] || falhar "cadastro do Superior B (status $STATUS)"
+
+          echo "2) Entrar na empresa A sem o código certo (esperado 403)..."
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$URL/api/auth/cadastro" \
+            -H "Content-Type: application/json" \
+            -d "{\"nome\":\"Intruso\",\"email\":\"ci-intruso-$TS@exemplo.com\",\"senha\":\"$SENHA\",\"empresa\":\"$EMPRESA_A\",\"categoria\":\"planejador\",\"codigo_empresa\":\"CODIGOERRADO\"}")
+          echo "   status: $STATUS"
+          [ "$STATUS" = "403" ] || falhar "cadastro com código errado deveria responder 403"
+
+          echo "3) Login das duas empresas..."
+          STATUS=$(curl -s -D /tmp/iso-a.txt -o /dev/null -w "%{http_code}" -X POST "$URL/api/auth/login" \
+            -H "Content-Type: application/json" -d "{\"email\":\"$EMAIL_A\",\"senha\":\"$SENHA\"}")
+          [ "$STATUS" = "200" ] || falhar "login do Superior A (status $STATUS)"
+          STATUS=$(curl -s -D /tmp/iso-b.txt -o /dev/null -w "%{http_code}" -X POST "$URL/api/auth/login" \
+            -H "Content-Type: application/json" -d "{\"email\":\"$EMAIL_B\",\"senha\":\"$SENHA\"}")
+          [ "$STATUS" = "200" ] || falhar "login do Superior B (status $STATUS)"
+
+          # o cookie é Secure (só vai por HTTPS), então o token é lido do Set-Cookie e enviado à mão
+          TOKEN_A=$(sed -nE 's/^[Ss]et-[Cc]ookie: token=([^;]+);.*/\1/p' /tmp/iso-a.txt | head -n 1)
+          TOKEN_B=$(sed -nE 's/^[Ss]et-[Cc]ookie: token=([^;]+);.*/\1/p' /tmp/iso-b.txt | head -n 1)
+          [ -n "$TOKEN_A" ] && [ -n "$TOKEN_B" ] || falhar "o login não devolveu o cookie de sessão"
+
+          echo "4) A cria um projeto (esperado 201)..."
+          STATUS=$(curl -s -o /tmp/iso-projeto.json -w "%{http_code}" -X POST "$URL/api/projetos" \
+            -H "Content-Type: application/json" -H "Cookie: token=$TOKEN_A" \
+            -d '{"nome":"Projeto secreto da empresa A"}')
+          cat /tmp/iso-projeto.json; echo ""
+          [ "$STATUS" = "201" ] || falhar "criar projeto na empresa A (status $STATUS)"
+          ID=$(sed -nE 's/.*"id":([0-9]+).*/\1/p' /tmp/iso-projeto.json | head -n 1)
+          [ -n "$ID" ] || falhar "a criação do projeto não devolveu o id"
+
+          echo "5) A enxerga o próprio projeto (esperado 200)..."
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$URL/api/projetos/$ID" -H "Cookie: token=$TOKEN_A")
+          [ "$STATUS" = "200" ] || falhar "A deveria abrir o próprio projeto (status $STATUS)"
+
+          echo "6) B tenta abrir, editar, concluir e excluir o projeto de A (esperado 404 em tudo)..."
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$URL/api/projetos/$ID" -H "Cookie: token=$TOKEN_B")
+          echo "   abrir: $STATUS"
+          [ "$STATUS" = "404" ] || falhar "B abriu o projeto de A (status $STATUS)"
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" -X PUT "$URL/api/projetos/$ID" \
+            -H "Content-Type: application/json" -H "Cookie: token=$TOKEN_B" -d '{"nome":"invadido"}')
+          echo "   editar: $STATUS"
+          [ "$STATUS" = "404" ] || falhar "B editou o projeto de A (status $STATUS)"
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" -X PATCH "$URL/api/projetos/$ID/concluir" -H "Cookie: token=$TOKEN_B")
+          echo "   concluir: $STATUS"
+          [ "$STATUS" = "404" ] || falhar "B concluiu o projeto de A (status $STATUS)"
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" -X DELETE "$URL/api/projetos/$ID" -H "Cookie: token=$TOKEN_B")
+          echo "   excluir: $STATUS"
+          [ "$STATUS" = "404" ] || falhar "B excluiu o projeto de A (status $STATUS)"
+
+          echo "7) A lista de projetos de B não pode conter o projeto de A..."
+          curl -s "$URL/api/projetos" -H "Cookie: token=$TOKEN_B" > /tmp/iso-lista-b.json
+          cat /tmp/iso-lista-b.json; echo ""
+          if grep -q "Projeto secreto da empresa A" /tmp/iso-lista-b.json; then
+            falhar "a lista de B mostrou o projeto de A"
+          fi
+
+          echo "8) B tenta ver o perfil de um usuário de A (esperado 404)..."
+          ID_A=$(curl -s "$URL/api/me" -H "Cookie: token=$TOKEN_A" | sed -nE 's/.*"usuario_id":([0-9]+).*/\1/p')
+          [ -n "$ID_A" ] || falhar "não consegui o id do usuário A"
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$URL/api/perfil/$ID_A" -H "Cookie: token=$TOKEN_B")
+          echo "   status: $STATUS"
+          [ "$STATUS" = "404" ] || falhar "B viu o perfil de A (status $STATUS)"
+
+          echo "9) O projeto de A continua intacto (esperado 200)..."
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$URL/api/projetos/$ID" -H "Cookie: token=$TOKEN_A")
+          [ "$STATUS" = "200" ] || falhar "o projeto de A sumiu ou mudou (status $STATUS)"
+
+          echo ""
+          echo "Isolamento OK -- a empresa B não enxerga nem altera nada da empresa A."
 
       # Regressão (Python): testes unitários do modelo + chamadas HTTP de verdade, feitas de
       # dentro do container (o serviço não publica porta). Sem chave interna = 403; entrada

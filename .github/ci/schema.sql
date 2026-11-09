@@ -1,22 +1,12 @@
--- Schema usado pelo pipeline de CI (job build-and-test). É uma CÓPIA EXATA de banco/01-schema.sql:
--- se alterar um, copie para o outro.
+-- Schema usado pelo pipeline de CI (job build-and-test), aplicado no banco de teste.
+-- Vai em .github/ci/schema.sql. É composto por duas partes:
+--   PARTE 1: tabelas base que o auth-service, o profile-service e o pagamentos criam/usam (pré-requisito).
+--   PARTE 2: CÓPIA EXATA de db/001_dominio.sql, sem a linha "USE ..." (o CI já escolhe o banco no comando).
+-- Se alterar o db/001_dominio.sql, copie a mudança para a PARTE 2 daqui.
+-- Os scripts antigos de banco/ (01-schema.sql, 02-migracao.sql) não valem mais.
 
 -- ============================================================================
--- Atenas SGE — schema do banco (MariaDB)
---
--- Cria todas as tabelas do produto. É IDEMPOTENTE: pode rodar mais de uma vez,
--- porque usa CREATE TABLE IF NOT EXISTS (tabelas que já existem são mantidas).
--- Execute com o banco já selecionado (ex.: USE nome_do_banco;).
---
--- Para um banco que JÁ TEM tabelas de uma versão anterior, rode também as alterações do
--- arquivo 02-migracao.sql (colunas novas em usuarios e itens).
---
--- Quem usa o quê:
---   usuarios, reset_tokens ........ auth-service
---   perfis ........................ profile-service (bio e referência da foto)
---   clientes_stripe ............... pagamentos
---   projetos, itens, demandas ..... app
---   modelos_regressao ............. regressao (modelo treinado de cada usuário)
+-- PARTE 1 — tabelas base
 -- ============================================================================
 
 CREATE TABLE IF NOT EXISTS usuarios (
@@ -55,59 +45,79 @@ CREATE TABLE IF NOT EXISTS clientes_stripe (
   FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE CASCADE
 );
 
--- status: ativo | concluido. Só projetos ATIVOS contam no limite do plano Professional.
+-- ============================================================================
+-- PARTE 2 — db/001_dominio.sql (sem o USE)
+-- ============================================================================
+
+-- ---------- empresas ----------
+CREATE TABLE IF NOT EXISTS organizacoes (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  nome VARCHAR(150) NOT NULL,
+  codigo_convite VARCHAR(16) NOT NULL,          -- o Superior passa este código à equipe, que o digita no cadastro
+  criado_em DATETIME DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY uq_organizacoes_nome (nome)
+);
+
+-- ---------- usuários: categoria e empresa ----------
+ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS categoria VARCHAR(20) NOT NULL DEFAULT 'superior';
+ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS organizacao_id INT NULL;
+
+-- ---------- projetos ----------
 CREATE TABLE IF NOT EXISTS projetos (
   id INT AUTO_INCREMENT PRIMARY KEY,
   nome VARCHAR(150) NOT NULL,
-  descricao TEXT,
+  descricao TEXT NULL,
   prazo_dias INT NULL,
-  status VARCHAR(20) NOT NULL DEFAULT 'ativo',
-  funcionarios_usados INT NULL,
-  concluido_em TIMESTAMP NULL,
+  status ENUM('ativo', 'concluido') NOT NULL DEFAULT 'ativo',
+  funcionarios_usados INT NULL,                  -- não é mais pedido na conclusão; mantido por compatibilidade
   criado_por INT NOT NULL,
-  criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  FOREIGN KEY (criado_por) REFERENCES usuarios(id),
-  INDEX idx_projetos_dono_status (criado_por, status)
+  organizacao_id INT NULL,
+  criado_em DATETIME DEFAULT CURRENT_TIMESTAMP,
+  concluido_em DATETIME NULL,
+  FOREIGN KEY (criado_por) REFERENCES usuarios(id)
 );
+ALTER TABLE projetos ADD COLUMN IF NOT EXISTS organizacao_id INT NULL;
+ALTER TABLE projetos ADD COLUMN IF NOT EXISTS funcionarios_usados INT NULL;
+ALTER TABLE projetos ADD COLUMN IF NOT EXISTS concluido_em DATETIME NULL;
 
--- cada material tem um RG, uma quantidade e o projeto a que pertence.
--- concluido = o item já foi CONSUMIDO NA MONTAGEM (a soma das quantidades concluídas no mês é a "demanda").
-CREATE TABLE IF NOT EXISTS itens (
-  id INT AUTO_INCREMENT PRIMARY KEY,
-  projeto_id INT NOT NULL,
-  rg VARCHAR(50) NOT NULL,
-  nome VARCHAR(150) NOT NULL,
-  quantidade INT NOT NULL DEFAULT 1,
-  concluido BOOLEAN NOT NULL DEFAULT FALSE,
-  concluido_em TIMESTAMP NULL,
-  concluido_por INT NULL,
-  criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  FOREIGN KEY (projeto_id) REFERENCES projetos(id) ON DELETE CASCADE,
-  UNIQUE (projeto_id, rg),
-  INDEX idx_itens_concluidos (concluido, concluido_em)
-);
-
--- demanda: trabalho de um PROCESSO dentro de um projeto, atribuído a um responsável.
--- atividade = processo: planejamento | almoxarifado | fabricacao | montagem (nesta ordem no fluxo).
--- Todo usuário vê só as demandas em que é responsável; excluir exige expert/admin.
+-- ---------- demandas (cada demanda é um item: RG, material e quantidade, que percorre o fluxo) ----------
 CREATE TABLE IF NOT EXISTS demandas (
   id INT AUTO_INCREMENT PRIMARY KEY,
   projeto_id INT NOT NULL,
-  atividade VARCHAR(20) NOT NULL,
-  descricao VARCHAR(255) NOT NULL,
-  responsavel_id INT NOT NULL,
-  status VARCHAR(20) NOT NULL DEFAULT 'aberta',  -- aberta | em_andamento | concluida
-  criado_por INT NOT NULL,
-  criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  FOREIGN KEY (projeto_id) REFERENCES projetos(id) ON DELETE CASCADE,
-  FOREIGN KEY (responsavel_id) REFERENCES usuarios(id),
-  FOREIGN KEY (criado_por) REFERENCES usuarios(id),
-  INDEX idx_demandas_responsavel (responsavel_id, status),
-  INDEX idx_demandas_criador (criado_por, status)
-);
+  organizacao_id INT NULL,
+  rg VARCHAR(50) NOT NULL,
+  nome_material VARCHAR(255) NOT NULL,
+  quantidade INT NOT NULL DEFAULT 1,
 
--- modelo de regressão treinado por cada usuário (uma linha por recurso de análise).
--- resultado: JSON com coeficientes, métricas, faixa dos dados e pontos do ajuste.
+  -- onde a demanda está agora
+  etapa_atual ENUM('almoxarifado', 'operacao', 'montagem', 'finalizada') NOT NULL DEFAULT 'almoxarifado',
+
+  -- quem fez o quê em cada etapa
+  planejador_id INT NOT NULL,
+  almoxarife_id INT DEFAULT NULL,
+  operador_id INT DEFAULT NULL,
+  montador_id INT DEFAULT NULL,
+
+  criado_em DATETIME DEFAULT CURRENT_TIMESTAMP,
+  atualizado_em DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  finalizado_em DATETIME NULL,                   -- preenchido quando a Montagem finaliza: base da "demanda do mês"
+
+  -- exclusão lógica: preenchida = a demanda está na aba Excluídas do Planejador
+  excluida_em DATETIME NULL,
+  excluida_por INT NULL,
+
+  FOREIGN KEY (projeto_id) REFERENCES projetos(id) ON DELETE CASCADE,
+  FOREIGN KEY (planejador_id) REFERENCES usuarios(id),
+  FOREIGN KEY (almoxarife_id) REFERENCES usuarios(id),
+  FOREIGN KEY (operador_id) REFERENCES usuarios(id),
+  FOREIGN KEY (montador_id) REFERENCES usuarios(id)
+);
+ALTER TABLE demandas ADD COLUMN IF NOT EXISTS organizacao_id INT NULL;
+ALTER TABLE demandas ADD COLUMN IF NOT EXISTS finalizado_em DATETIME NULL;
+ALTER TABLE demandas ADD COLUMN IF NOT EXISTS excluida_em DATETIME NULL;
+ALTER TABLE demandas ADD COLUMN IF NOT EXISTS excluida_por INT NULL;
+
+-- ---------- modelo da previsão de equipe (um por usuário) ----------
 CREATE TABLE IF NOT EXISTS modelos_regressao (
   usuario_id INT NOT NULL,
   recurso VARCHAR(40) NOT NULL,
@@ -119,3 +129,62 @@ CREATE TABLE IF NOT EXISTS modelos_regressao (
   PRIMARY KEY (usuario_id, recurso),
   FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE CASCADE
 );
+
+-- ---------- dados que já existiam: tudo vai para uma única empresa de teste ----------
+INSERT INTO organizacoes (nome, codigo_convite)
+SELECT 'Empresa de teste (legado)', UPPER(SUBSTRING(MD5(UUID()), 1, 8))
+FROM DUAL
+WHERE EXISTS (SELECT 1 FROM usuarios WHERE organizacao_id IS NULL)
+  AND NOT EXISTS (SELECT 1 FROM organizacoes WHERE nome = 'Empresa de teste (legado)');
+
+UPDATE usuarios
+   SET organizacao_id = (SELECT id FROM organizacoes WHERE nome = 'Empresa de teste (legado)')
+ WHERE organizacao_id IS NULL;
+
+UPDATE projetos p JOIN usuarios u ON u.id = p.criado_por
+   SET p.organizacao_id = u.organizacao_id
+ WHERE p.organizacao_id IS NULL;
+
+UPDATE demandas d JOIN projetos p ON p.id = d.projeto_id
+   SET d.organizacao_id = p.organizacao_id
+ WHERE d.organizacao_id IS NULL;
+
+-- projetos e demandas nunca ficam sem empresa (se sobrar alguma linha sem empresa, o comando falha de propósito)
+ALTER TABLE projetos MODIFY organizacao_id INT NOT NULL;
+ALTER TABLE demandas MODIFY organizacao_id INT NOT NULL;
+
+-- ---------- chaves estrangeiras da empresa (só cria se ainda não existir) ----------
+SET @sql := (SELECT IF(COUNT(*) = 0,
+  'ALTER TABLE usuarios ADD CONSTRAINT fk_usuarios_organizacao FOREIGN KEY (organizacao_id) REFERENCES organizacoes(id)',
+  'SELECT ''fk_usuarios_organizacao já existe'' AS aviso')
+  FROM information_schema.TABLE_CONSTRAINTS
+ WHERE CONSTRAINT_SCHEMA = DATABASE() AND TABLE_NAME = 'usuarios' AND CONSTRAINT_NAME = 'fk_usuarios_organizacao');
+PREPARE passo FROM @sql; EXECUTE passo; DEALLOCATE PREPARE passo;
+
+SET @sql := (SELECT IF(COUNT(*) = 0,
+  'ALTER TABLE projetos ADD CONSTRAINT fk_projetos_organizacao FOREIGN KEY (organizacao_id) REFERENCES organizacoes(id) ON DELETE CASCADE',
+  'SELECT ''fk_projetos_organizacao já existe'' AS aviso')
+  FROM information_schema.TABLE_CONSTRAINTS
+ WHERE CONSTRAINT_SCHEMA = DATABASE() AND TABLE_NAME = 'projetos' AND CONSTRAINT_NAME = 'fk_projetos_organizacao');
+PREPARE passo FROM @sql; EXECUTE passo; DEALLOCATE PREPARE passo;
+
+SET @sql := (SELECT IF(COUNT(*) = 0,
+  'ALTER TABLE demandas ADD CONSTRAINT fk_demandas_organizacao FOREIGN KEY (organizacao_id) REFERENCES organizacoes(id) ON DELETE CASCADE',
+  'SELECT ''fk_demandas_organizacao já existe'' AS aviso')
+  FROM information_schema.TABLE_CONSTRAINTS
+ WHERE CONSTRAINT_SCHEMA = DATABASE() AND TABLE_NAME = 'demandas' AND CONSTRAINT_NAME = 'fk_demandas_organizacao');
+PREPARE passo FROM @sql; EXECUTE passo; DEALLOCATE PREPARE passo;
+
+SET @sql := (SELECT IF(COUNT(*) = 0,
+  'ALTER TABLE demandas ADD CONSTRAINT fk_demandas_excluida_por FOREIGN KEY (excluida_por) REFERENCES usuarios(id) ON DELETE SET NULL',
+  'SELECT ''fk_demandas_excluida_por já existe'' AS aviso')
+  FROM information_schema.TABLE_CONSTRAINTS
+ WHERE CONSTRAINT_SCHEMA = DATABASE() AND TABLE_NAME = 'demandas' AND CONSTRAINT_NAME = 'fk_demandas_excluida_por');
+PREPARE passo FROM @sql; EXECUTE passo; DEALLOCATE PREPARE passo;
+
+-- ---------- índices (toda consulta da API filtra pela empresa) ----------
+CREATE INDEX IF NOT EXISTS idx_usuarios_organizacao ON usuarios (organizacao_id);
+CREATE INDEX IF NOT EXISTS idx_projetos_organizacao ON projetos (organizacao_id, status);
+CREATE INDEX IF NOT EXISTS idx_demandas_organizacao ON demandas (organizacao_id, etapa_atual, excluida_em);
+CREATE INDEX IF NOT EXISTS idx_demandas_planejador ON demandas (planejador_id, excluida_em);
+CREATE INDEX IF NOT EXISTS idx_demandas_projeto ON demandas (projeto_id, excluida_em);
