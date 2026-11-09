@@ -1,4 +1,5 @@
 const express = require('express')
+const crypto = require('crypto')
 const jwt = require('jsonwebtoken')
 const rateLimit = require('express-rate-limit')
 const multer = require('multer')
@@ -20,17 +21,18 @@ const TAMANHO_MAXIMO_MB = Number(process.env.PROFILE_IMAGE_MAX_SIZE_MB || 5)
 const HIERARQUIA = ['professional', 'expert', 'admin']
 
 // Categorias de usuário:
-//  - Superior: cadastra, edita, exclui e conclui projetos (não mexe em demandas)
+//  - Superior: cadastra, edita, exclui e conclui projetos (não mexe em demandas). Nasce ao criar a empresa.
 //  - Planejador: cadastra, edita e exclui demandas (a exclusão move para a aba Excluídas)
 //  - Almoxarife, Operador, Montador: cada um avança a demanda da sua etapa
-// Tokens antigos, sem categoria, valem como Superior.
+const CATEGORIAS = ['superior', 'planejador', 'almoxarife', 'operador', 'montador']
+
 function categoriaDe(usuario) {
   return usuario.categoria || 'superior'
 }
 
 // Limites do plano gratuito. Só contam o que está ATIVO
 const LIMITES = {
-  professional: { projetos_ativos: 3, demandas_abertas: 50 } // Ampliando o limite de demandas já que itens sumiram
+  professional: { projetos_ativos: 3, demandas_abertas: 50 }
 }
 
 function nivelDe(role) {
@@ -45,6 +47,19 @@ function limiteDe(role, chave) {
 function ehAdmin(req) {
   return req.usuario.role === 'admin'
 }
+
+// Registra um evento de negócio sempre com quem fez, o IP e a empresa (org=...)
+function logar(req, acao, detalhe) {
+  const org = `org=${req.organizacaoId ?? '-'}`
+  registrarEvento({
+    usuario_id: req.usuario.usuario_id,
+    acao,
+    ip_origem: req.ip,
+    detalhe: detalhe ? `${detalhe} ${org}` : org
+  })
+}
+
+// ---------- AUTENTICAÇÃO E EMPRESA ----------
 
 // lê e valida o JWT do cookie, popula req.usuario
 function exigirLogin(req, res, next) {
@@ -61,15 +76,33 @@ function exigirLogin(req, res, next) {
   }
 }
 
+// ISOLAMENTO: a empresa e a categoria são lidas DO BANCO a cada requisição.
+// Nunca vêm do cliente nem do token. Conta sem empresa é barrada.
+async function carregarEmpresa(req, res, next) {
+  try {
+    const [[u]] = await db.query(
+      'SELECT organizacao_id, categoria FROM usuarios WHERE id = ?',
+      [req.usuario.usuario_id]
+    )
+    if (!u || !u.organizacao_id) {
+      return res.status(403).json({ mensagem: 'Sua conta não está vinculada a uma empresa.' })
+    }
+    req.organizacaoId = u.organizacao_id
+    req.usuario.categoria = u.categoria // a categoria do banco vale mais que a do token
+    next()
+  } catch (err) {
+    console.error(err)
+    res.status(500).json({ mensagem: 'Erro ao validar a empresa.' })
+  }
+}
+
+// Use em TODA rota que toca dados de negócio
+const exigirEmpresa = [exigirLogin, carregarEmpresa]
+
 function exigirNivel(roleMinimo) {
   return (req, res, next) => {
     if (nivelDe(req.usuario.role) < nivelDe(roleMinimo)) {
-      registrarEvento({
-        usuario_id: req.usuario.usuario_id,
-        acao: 'acesso_negado',
-        ip_origem: req.ip,
-        detalhe: `rota=${req.method} ${req.originalUrl} role_atual=${req.usuario.role} nivel_exigido=${roleMinimo}`
-      })
+      logar(req, 'acesso_negado', `rota=${req.method} ${req.originalUrl} role_atual=${req.usuario.role} nivel_exigido=${roleMinimo}`)
       return res.status(403).json({
         mensagem: roleMinimo === 'expert' ? 'Esse recurso exige o plano Expert.' : 'Seu papel não tem permissão para essa ação.',
         codigo: 'plano_insuficiente',
@@ -85,12 +118,7 @@ function exigirCategoria(categorias, mensagem) {
   return (req, res, next) => {
     const atual = categoriaDe(req.usuario)
     if (categorias.includes(atual)) return next()
-    registrarEvento({
-      usuario_id: req.usuario.usuario_id,
-      acao: 'acesso_negado',
-      ip_origem: req.ip,
-      detalhe: `rota=${req.method} ${req.originalUrl} categoria_atual=${atual} categorias_exigidas=${categorias.join('|')}`
-    })
+    logar(req, 'acesso_negado', `rota=${req.method} ${req.originalUrl} categoria_atual=${atual} categorias_exigidas=${categorias.join('|')}`)
     return res.status(403).json({ mensagem })
   }
 }
@@ -109,12 +137,7 @@ async function dentroDoLimite(req, res, chave, contar) {
   const atual = await contar()
   if (atual < limite) return true
 
-  registrarEvento({
-    usuario_id: req.usuario.usuario_id,
-    acao: 'limite_plano_atingido',
-    ip_origem: req.ip,
-    detalhe: `limite=${chave} valor=${limite} role=${req.usuario.role}`
-  })
+  logar(req, 'limite_plano_atingido', `limite=${chave} valor=${limite} role=${req.usuario.role}`)
   res.status(403).json({
     mensagem: `Você atingiu o limite do plano Professional (${limite}). Assine o plano Expert para continuar.`,
     codigo: 'limite_plano',
@@ -127,6 +150,13 @@ const limitadorEscrita = rateLimit({
   windowMs: 60 * 1000,
   max: 20,
   message: { mensagem: 'Muitas requisições. Aguarde um momento.' }
+})
+
+// Contra adivinhação do código da empresa
+const limitadorCadastro = rateLimit({
+  windowMs: 60 * 1000,
+  max: 10,
+  message: { mensagem: 'Muitas tentativas de cadastro. Aguarde um minuto.' }
 })
 
 const OPCOES_COOKIE = {
@@ -145,28 +175,166 @@ const uploadFoto = multer({
 
 // ---------- USUÁRIO LOGADO ----------
 
-router.get('/me', exigirLogin, (req, res) => {
-  res.json({
-    usuario_id: req.usuario.usuario_id,
-    nome: req.usuario.nome,
-    role: req.usuario.role,
-    categoria: categoriaDe(req.usuario)
-  })
+router.get('/me', exigirLogin, async (req, res) => {
+  try {
+    const [[u]] = await db.query(
+      `SELECT u.categoria, o.nome AS empresa
+         FROM usuarios u LEFT JOIN organizacoes o ON o.id = u.organizacao_id
+        WHERE u.id = ?`,
+      [req.usuario.usuario_id]
+    )
+    res.json({
+      usuario_id: req.usuario.usuario_id,
+      nome: req.usuario.nome,
+      role: req.usuario.role,
+      categoria: u ? u.categoria : categoriaDe(req.usuario),
+      empresa: u ? u.empresa : null
+    })
+  } catch (err) {
+    console.error(err)
+    res.status(500).json({ mensagem: 'Erro ao buscar o usuário.' })
+  }
+})
+
+// ---------- EMPRESA (equipe e código) ----------
+
+function gerarCodigoEmpresa() {
+  return crypto.randomBytes(6).toString('hex').toUpperCase() // 12 caracteres, imprevisível
+}
+
+// O Superior vê o código que passa para a equipe
+router.get('/organizacao', ...exigirEmpresa, exigirCategoria(['superior'], 'Só o Superior vê o código da empresa.'), async (req, res) => {
+  try {
+    const [[org]] = await db.query(
+      'SELECT id, nome, codigo_convite FROM organizacoes WHERE id = ?',
+      [req.organizacaoId]
+    )
+    if (!org) return res.status(404).json({ mensagem: 'Empresa não encontrada.' })
+    res.json({ id: org.id, nome: org.nome, codigo: org.codigo_convite })
+  } catch (err) {
+    console.error(err)
+    res.status(500).json({ mensagem: 'Erro ao buscar a empresa.' })
+  }
+})
+
+// Renovar invalida o código antigo na hora
+router.post('/organizacao/codigo', ...exigirEmpresa, exigirCategoria(['superior'], 'Só o Superior renova o código da empresa.'), limitadorEscrita, async (req, res) => {
+  try {
+    const codigo = gerarCodigoEmpresa()
+    await db.query('UPDATE organizacoes SET codigo_convite = ? WHERE id = ?', [codigo, req.organizacaoId])
+    logar(req, 'codigo_empresa_renovado')
+    res.json({ codigo })
+  } catch (err) {
+    console.error(err)
+    res.status(500).json({ mensagem: 'Erro ao renovar o código.' })
+  }
 })
 
 // ---------- PROXY PRO AUTH-SERVICE ----------
 
-router.post('/auth/cadastro', async (req, res) => {
+// Cadastro com empresa:
+//  - Superior: cria a empresa (nome único) e vira o dono dela.
+//  - Demais categorias: informam nome E código da empresa. Nome ou código errado responde igual (403).
+// A empresa vem sempre daqui, nunca do cliente: o organizacao_id enviado pelo front é descartado.
+router.post('/auth/cadastro', limitadorCadastro, async (req, res) => {
+  const empresa = String(req.body.empresa || '').trim()
+  const codigo = String(req.body.codigo_empresa || '').trim().toUpperCase()
+  const categoria = String(req.body.categoria || '').trim().toLowerCase()
+  const email = String(req.body.email || '').trim().toLowerCase()
+
+  if (!empresa || empresa.length > 150) {
+    return res.status(400).json({ mensagem: 'Informe o nome da empresa (até 150 caracteres).' })
+  }
+  if (!CATEGORIAS.includes(categoria)) {
+    return res.status(400).json({ mensagem: 'Escolha uma categoria válida.' })
+  }
+  if (!email) {
+    return res.status(400).json({ mensagem: 'Informe o e-mail.' })
+  }
+
+  let organizacaoId = null
+  let criouEmpresa = false
+
+  // desfaz a empresa recém-criada se o cadastro não se completar (só se ninguém entrou nela)
+  async function desfazerEmpresa() {
+    if (!criouEmpresa) return
+    try {
+      await db.query(
+        'DELETE FROM organizacoes WHERE id = ? AND id NOT IN (SELECT organizacao_id FROM usuarios WHERE organizacao_id IS NOT NULL)',
+        [organizacaoId]
+      )
+    } catch (err) {
+      console.error('Falha ao desfazer a empresa:', err.message)
+    }
+  }
+
   try {
-    const resposta = await fetch(`${AUTH_URL}/cadastro`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(req.body)
+    if (categoria === 'superior') {
+      try {
+        const [r] = await db.query(
+          'INSERT INTO organizacoes (nome, codigo_convite) VALUES (?, ?)',
+          [empresa, gerarCodigoEmpresa()]
+        )
+        organizacaoId = r.insertId
+        criouEmpresa = true
+      } catch (err) {
+        if (err.code === 'ER_DUP_ENTRY') {
+          return res.status(409).json({ mensagem: 'Já existe uma empresa com esse nome.' })
+        }
+        throw err
+      }
+    } else {
+      const [[org]] = codigo
+        ? await db.query('SELECT id FROM organizacoes WHERE nome = ? AND codigo_convite = ?', [empresa, codigo])
+        : [[null]]
+      if (!org) {
+        return res.status(403).json({ mensagem: 'Empresa ou código inválidos.' })
+      }
+      organizacaoId = org.id
+    }
+
+    // o código nunca segue para o auth-service, e o organizacao_id é o que acabamos de decidir
+    const corpo = { ...req.body, email, categoria, organizacao_id: organizacaoId }
+    delete corpo.codigo_empresa
+
+    let resposta
+    try {
+      resposta = await fetch(`${AUTH_URL}/cadastro`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-internal-key': INTERNAL_API_KEY, 'x-forwarded-for': req.ip },
+        body: JSON.stringify(corpo)
+      })
+    } catch (err) {
+      await desfazerEmpresa()
+      return res.status(502).json({ mensagem: 'Serviço de autenticação indisponível.' })
+    }
+    const dados = await resposta.json().catch(() => ({}))
+
+    if (!resposta.ok) {
+      await desfazerEmpresa()
+      return res.status(resposta.status).json(dados)
+    }
+
+    // Garante empresa e categoria no usuário, mesmo que o auth-service ainda não grave esses campos.
+    // Só mexe em conta recém-criada (sem empresa, ou já com a empresa certa).
+    await db.query(
+      'UPDATE usuarios SET organizacao_id = ?, categoria = ? WHERE email = ? AND (organizacao_id IS NULL OR organizacao_id = ?)',
+      [organizacaoId, categoria, email, organizacaoId]
+    )
+
+    const [[novo]] = await db.query('SELECT id FROM usuarios WHERE email = ?', [email])
+    registrarEvento({
+      usuario_id: novo ? novo.id : null,
+      acao: criouEmpresa ? 'empresa_criada' : 'membro_cadastrado',
+      ip_origem: req.ip,
+      detalhe: `categoria=${categoria} org=${organizacaoId}`
     })
-    const dados = await resposta.json()
+
     res.status(resposta.status).json(dados)
   } catch (err) {
-    res.status(502).json({ mensagem: 'Serviço de autenticação indisponível.' })
+    console.error(err)
+    await desfazerEmpresa()
+    res.status(500).json({ mensagem: 'Erro ao cadastrar.' })
   }
 })
 
@@ -174,7 +342,7 @@ router.post('/auth/login', async (req, res) => {
   try {
     const resposta = await fetch(`${AUTH_URL}/login`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'x-forwarded-for': req.ip },
       body: JSON.stringify(req.body)
     })
     const dados = await resposta.json()
@@ -203,7 +371,7 @@ router.post('/auth/renovar', exigirLogin, limitadorRenovar, async (req, res) => 
       headers: { 'x-internal-key': INTERNAL_API_KEY }
     })
     if (!resposta.ok) throw new Error(`auth-service respondeu ${resposta.status}`)
-    const dados = await resposta.json() 
+    const dados = await resposta.json()
     res.cookie('token', dados.token, OPCOES_COOKIE)
     res.json({ role: dados.role })
   } catch (err) {
@@ -215,7 +383,7 @@ router.post('/auth/esqueci-senha', async (req, res) => {
   try {
     const resposta = await fetch(`${AUTH_URL}/esqueci-senha`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'x-forwarded-for': req.ip },
       body: JSON.stringify(req.body)
     })
     const dados = await resposta.json()
@@ -241,7 +409,7 @@ router.post('/auth/redefinir-senha', async (req, res) => {
 
 // ---------- PROJETOS ----------
 // O Superior cadastra, edita, exclui e conclui projetos, em qualquer plano (só o limite de projetos ativos
-// do Professional continua valendo). Os demais usuários apenas consultam.
+// do Professional continua valendo). Os demais usuários apenas consultam. Tudo dentro da própria empresa.
 
 function lerCamposProjeto(corpo) {
   const nome = String(corpo.nome || '').trim()
@@ -258,6 +426,7 @@ function lerCamposProjeto(corpo) {
   return { nome, descricao, prazo }
 }
 
+// ISOLAMENTO: projeto de outra empresa responde 404, igual a um projeto que não existe
 async function carregarProjeto(req, res) {
   const id = Number(req.params.id)
   if (!Number.isInteger(id) || id <= 0) {
@@ -265,7 +434,10 @@ async function carregarProjeto(req, res) {
     return null
   }
 
-  const [linhas] = await db.query('SELECT * FROM projetos WHERE id = ?', [id])
+  const [linhas] = await db.query(
+    'SELECT * FROM projetos WHERE id = ? AND organizacao_id = ?',
+    [id, req.organizacaoId]
+  )
   const projeto = linhas[0]
 
   if (!projeto) {
@@ -277,31 +449,26 @@ async function carregarProjeto(req, res) {
   return { projeto, souDono }
 }
 
-router.post('/projetos', exigirLogin, exigirCategoria(['superior'], 'Só o Superior pode cadastrar projetos.'), limitadorEscrita, async (req, res) => {
+router.post('/projetos', ...exigirEmpresa, exigirCategoria(['superior'], 'Só o Superior pode cadastrar projetos.'), limitadorEscrita, async (req, res) => {
   const campos = lerCamposProjeto(req.body)
   if (campos.erro) return res.status(400).json({ mensagem: campos.erro })
 
   try {
     const pode = await dentroDoLimite(req, res, 'projetos_ativos', async () => {
       const [[{ total }]] = await db.query(
-        "SELECT COUNT(*) AS total FROM projetos WHERE criado_por = ? AND status = 'ativo'",
-        [req.usuario.usuario_id]
+        "SELECT COUNT(*) AS total FROM projetos WHERE criado_por = ? AND organizacao_id = ? AND status = 'ativo'",
+        [req.usuario.usuario_id, req.organizacaoId]
       )
       return total
     })
     if (!pode) return
 
     const [resultado] = await db.query(
-      'INSERT INTO projetos (nome, descricao, prazo_dias, criado_por) VALUES (?, ?, ?, ?)',
-      [campos.nome, campos.descricao, campos.prazo, req.usuario.usuario_id]
+      'INSERT INTO projetos (nome, descricao, prazo_dias, criado_por, organizacao_id) VALUES (?, ?, ?, ?, ?)',
+      [campos.nome, campos.descricao, campos.prazo, req.usuario.usuario_id, req.organizacaoId]
     )
 
-    registrarEvento({
-      usuario_id: req.usuario.usuario_id,
-      acao: 'projeto_criado',
-      ip_origem: req.ip,
-      detalhe: `projeto_id=${resultado.insertId}`
-    })
+    logar(req, 'projeto_criado', `projeto_id=${resultado.insertId}`)
 
     res.status(201).json({ id: resultado.insertId })
   } catch (err) {
@@ -310,13 +477,17 @@ router.post('/projetos', exigirLogin, exigirCategoria(['superior'], 'Só o Super
   }
 })
 
-router.get('/projetos', exigirLogin, async (req, res) => {
+router.get('/projetos', ...exigirEmpresa, async (req, res) => {
   try {
     const campos = `p.id, p.nome, p.descricao, p.prazo_dias, p.status, p.criado_em,
       p.criado_por = ? AS sou_dono,
-      (SELECT COUNT(*) FROM demandas d WHERE d.projeto_id = p.id AND d.excluida_em IS NULL) AS total_demandas`
+      (SELECT COUNT(*) FROM demandas d
+        WHERE d.projeto_id = p.id AND d.organizacao_id = p.organizacao_id AND d.excluida_em IS NULL) AS total_demandas`
 
-    const [linhas] = await db.query(`SELECT ${campos} FROM projetos p ORDER BY p.id DESC`, [req.usuario.usuario_id])
+    const [linhas] = await db.query(
+      `SELECT ${campos} FROM projetos p WHERE p.organizacao_id = ? ORDER BY p.id DESC`,
+      [req.usuario.usuario_id, req.organizacaoId]
+    )
     res.json(linhas.map(l => ({ ...l, sou_dono: Boolean(l.sou_dono) })))
   } catch (err) {
     console.error(err)
@@ -324,7 +495,7 @@ router.get('/projetos', exigirLogin, async (req, res) => {
   }
 })
 
-router.get('/projetos/:id', exigirLogin, async (req, res) => {
+router.get('/projetos/:id', ...exigirEmpresa, async (req, res) => {
   try {
     const acesso = await carregarProjeto(req, res)
     if (!acesso) return
@@ -334,9 +505,9 @@ router.get('/projetos/:id', exigirLogin, async (req, res) => {
     const [demandas] = await db.query(
       `SELECT id, rg, nome_material, quantidade, etapa_atual, planejador_id
          FROM demandas
-        WHERE projeto_id = ? AND excluida_em IS NULL
+        WHERE projeto_id = ? AND organizacao_id = ? AND excluida_em IS NULL
         ORDER BY FIELD(etapa_atual, 'almoxarifado', 'operacao', 'montagem', 'finalizada'), id`,
-      [projeto.id]
+      [projeto.id, req.organizacaoId]
     )
 
     // Aba Excluídas: só o Planejador vê, e só as que ele mesmo excluiu neste projeto
@@ -345,9 +516,9 @@ router.get('/projetos/:id', exigirLogin, async (req, res) => {
       ;[excluidas] = await db.query(
         `SELECT id, rg, nome_material, quantidade, etapa_atual, planejador_id, excluida_em
            FROM demandas
-          WHERE projeto_id = ? AND planejador_id = ? AND excluida_em IS NOT NULL
+          WHERE projeto_id = ? AND organizacao_id = ? AND planejador_id = ? AND excluida_em IS NOT NULL
           ORDER BY excluida_em DESC, id DESC`,
-        [projeto.id, req.usuario.usuario_id]
+        [projeto.id, req.organizacaoId, req.usuario.usuario_id]
       )
     }
 
@@ -358,7 +529,7 @@ router.get('/projetos/:id', exigirLogin, async (req, res) => {
   }
 })
 
-router.put('/projetos/:id', exigirLogin, exigirCategoria(['superior'], 'Só o Superior pode editar projetos.'), limitadorEscrita, async (req, res) => {
+router.put('/projetos/:id', ...exigirEmpresa, exigirCategoria(['superior'], 'Só o Superior pode editar projetos.'), limitadorEscrita, async (req, res) => {
   const campos = lerCamposProjeto(req.body)
   if (campos.erro) return res.status(400).json({ mensagem: campos.erro })
 
@@ -373,16 +544,11 @@ router.put('/projetos/:id', exigirLogin, exigirCategoria(['superior'], 'Só o Su
     }
 
     await db.query(
-      'UPDATE projetos SET nome = ?, descricao = ?, prazo_dias = ? WHERE id = ?',
-      [campos.nome, campos.descricao, campos.prazo, acesso.projeto.id]
+      'UPDATE projetos SET nome = ?, descricao = ?, prazo_dias = ? WHERE id = ? AND organizacao_id = ?',
+      [campos.nome, campos.descricao, campos.prazo, acesso.projeto.id, req.organizacaoId]
     )
 
-    registrarEvento({
-      usuario_id: req.usuario.usuario_id,
-      acao: 'projeto_editado',
-      ip_origem: req.ip,
-      detalhe: `projeto_id=${acesso.projeto.id}`
-    })
+    logar(req, 'projeto_editado', `projeto_id=${acesso.projeto.id}`)
 
     res.json({ mensagem: 'Projeto atualizado.' })
   } catch (err) {
@@ -392,10 +558,10 @@ router.put('/projetos/:id', exigirLogin, exigirCategoria(['superior'], 'Só o Su
 })
 
 // Demandas que a Montagem ainda não concluiu (as excluídas não contam)
-async function contarPendentes(projetoId) {
+async function contarPendentes(projetoId, organizacaoId) {
   const [[{ total }]] = await db.query(
-    "SELECT COUNT(*) AS total FROM demandas WHERE projeto_id = ? AND etapa_atual <> 'finalizada' AND excluida_em IS NULL",
-    [projetoId]
+    "SELECT COUNT(*) AS total FROM demandas WHERE projeto_id = ? AND organizacao_id = ? AND etapa_atual <> 'finalizada' AND excluida_em IS NULL",
+    [projetoId, organizacaoId]
   )
   return Number(total)
 }
@@ -410,7 +576,7 @@ function responderPendentes(res, pendentes) {
 
 // Exclui o projeto e, em cascata, as demandas dele (inclusive as da aba Excluídas).
 // Com demandas não concluídas pela Montagem, só segue com ?confirmar=1 (o front mostra o aviso antes).
-router.delete('/projetos/:id', exigirLogin, exigirCategoria(['superior'], 'Só o Superior pode excluir projetos.'), limitadorEscrita, async (req, res) => {
+router.delete('/projetos/:id', ...exigirEmpresa, exigirCategoria(['superior'], 'Só o Superior pode excluir projetos.'), limitadorEscrita, async (req, res) => {
   try {
     const acesso = await carregarProjeto(req, res)
     if (!acesso) return
@@ -418,17 +584,12 @@ router.delete('/projetos/:id', exigirLogin, exigirCategoria(['superior'], 'Só o
       return res.status(403).json({ mensagem: 'Só quem criou o projeto pode excluí-lo.' })
     }
 
-    const pendentes = await contarPendentes(acesso.projeto.id)
+    const pendentes = await contarPendentes(acesso.projeto.id, req.organizacaoId)
     if (pendentes > 0 && req.query.confirmar !== '1') return responderPendentes(res, pendentes)
 
-    await db.query('DELETE FROM projetos WHERE id = ?', [acesso.projeto.id])
+    await db.query('DELETE FROM projetos WHERE id = ? AND organizacao_id = ?', [acesso.projeto.id, req.organizacaoId])
 
-    registrarEvento({
-      usuario_id: req.usuario.usuario_id,
-      acao: 'projeto_excluido',
-      ip_origem: req.ip,
-      detalhe: `projeto_id=${acesso.projeto.id} pendentes=${pendentes}`
-    })
+    logar(req, 'projeto_excluido', `projeto_id=${acesso.projeto.id} pendentes=${pendentes}`)
 
     res.json({ mensagem: 'Projeto excluído.' })
   } catch (err) {
@@ -440,7 +601,7 @@ router.delete('/projetos/:id', exigirLogin, exigirCategoria(['superior'], 'Só o
 // Concluir o projeto não pede mais o número de funcionários. Com demandas não concluídas pela Montagem,
 // só segue com ?confirmar=1; elas são encerradas (finalizada) sem passar pela Montagem e sem finalizado_em,
 // para não entrar na "demanda do mês" da previsão.
-router.patch('/projetos/:id/concluir', exigirLogin, exigirCategoria(['superior'], 'Só o Superior pode concluir projetos.'), limitadorEscrita, async (req, res) => {
+router.patch('/projetos/:id/concluir', ...exigirEmpresa, exigirCategoria(['superior'], 'Só o Superior pode concluir projetos.'), limitadorEscrita, async (req, res) => {
   try {
     const acesso = await carregarProjeto(req, res)
     if (!acesso) return
@@ -451,21 +612,19 @@ router.patch('/projetos/:id/concluir', exigirLogin, exigirCategoria(['superior']
       return res.status(409).json({ mensagem: 'Esse projeto já está concluído.' })
     }
 
-    const pendentes = await contarPendentes(acesso.projeto.id)
+    const pendentes = await contarPendentes(acesso.projeto.id, req.organizacaoId)
     if (pendentes > 0 && req.query.confirmar !== '1') return responderPendentes(res, pendentes)
 
-    await db.query("UPDATE projetos SET status = 'concluido', concluido_em = NOW() WHERE id = ?", [acesso.projeto.id])
     await db.query(
-      "UPDATE demandas SET etapa_atual = 'finalizada' WHERE projeto_id = ? AND etapa_atual <> 'finalizada' AND excluida_em IS NULL",
-      [acesso.projeto.id]
+      "UPDATE projetos SET status = 'concluido', concluido_em = NOW() WHERE id = ? AND organizacao_id = ?",
+      [acesso.projeto.id, req.organizacaoId]
+    )
+    await db.query(
+      "UPDATE demandas SET etapa_atual = 'finalizada' WHERE projeto_id = ? AND organizacao_id = ? AND etapa_atual <> 'finalizada' AND excluida_em IS NULL",
+      [acesso.projeto.id, req.organizacaoId]
     )
 
-    registrarEvento({
-      usuario_id: req.usuario.usuario_id,
-      acao: 'projeto_concluido',
-      ip_origem: req.ip,
-      detalhe: `projeto_id=${acesso.projeto.id} pendentes_encerradas=${pendentes}`
-    })
+    logar(req, 'projeto_concluido', `projeto_id=${acesso.projeto.id} pendentes_encerradas=${pendentes}`)
 
     res.json({ mensagem: 'Projeto concluído.' })
   } catch (err) {
@@ -512,11 +671,12 @@ function validarCamposDemanda(corpo, etapaPadrao) {
   return { rg, nome_material, quantidade, etapa }
 }
 
-router.post('/projetos/:id/demandas', exigirLogin, exigirCategoria(['planejador'], 'Só o Planejador pode cadastrar demandas.'), limitadorEscrita, async (req, res) => {
+router.post('/projetos/:id/demandas', ...exigirEmpresa, exigirCategoria(['planejador'], 'Só o Planejador pode cadastrar demandas.'), limitadorEscrita, async (req, res) => {
   const campos = validarCamposDemanda(req.body, ETAPA_INICIAL)
   if (campos.erro) return res.status(400).json({ mensagem: campos.erro })
 
   try {
+    // o projeto já vem filtrado pela empresa (404 se for de outra)
     const acesso = await carregarProjeto(req, res)
     if (!acesso) return
 
@@ -526,25 +686,20 @@ router.post('/projetos/:id/demandas', exigirLogin, exigirCategoria(['planejador'
 
     const pode = await dentroDoLimite(req, res, 'demandas_abertas', async () => {
       const [[{ total }]] = await db.query(
-        "SELECT COUNT(*) AS total FROM demandas WHERE planejador_id = ? AND etapa_atual <> 'finalizada' AND excluida_em IS NULL",
-        [req.usuario.usuario_id]
+        "SELECT COUNT(*) AS total FROM demandas WHERE planejador_id = ? AND organizacao_id = ? AND etapa_atual <> 'finalizada' AND excluida_em IS NULL",
+        [req.usuario.usuario_id, req.organizacaoId]
       )
       return total
     })
     if (!pode) return
 
     const [resultado] = await db.query(
-      `INSERT INTO demandas (projeto_id, rg, nome_material, quantidade, etapa_atual, planejador_id)
-       VALUES (?, ?, ?, ?, ?, ?)`,
-      [acesso.projeto.id, campos.rg, campos.nome_material, campos.quantidade, campos.etapa, req.usuario.usuario_id]
+      `INSERT INTO demandas (projeto_id, organizacao_id, rg, nome_material, quantidade, etapa_atual, planejador_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [acesso.projeto.id, req.organizacaoId, campos.rg, campos.nome_material, campos.quantidade, campos.etapa, req.usuario.usuario_id]
     )
 
-    registrarEvento({
-      usuario_id: req.usuario.usuario_id,
-      acao: 'demanda_criada',
-      ip_origem: req.ip,
-      detalhe: `demanda_id=${resultado.insertId} etapa=${campos.etapa}`
-    })
+    logar(req, 'demanda_criada', `demanda_id=${resultado.insertId} etapa=${campos.etapa}`)
 
     res.status(201).json({ id: resultado.insertId })
   } catch (err) {
@@ -553,9 +708,9 @@ router.post('/projetos/:id/demandas', exigirLogin, exigirCategoria(['planejador'
   }
 })
 
-// Fila de produção: só Almoxarife, Operador e Montador têm fila (a da própria etapa).
+// Fila de produção: só Almoxarife, Operador e Montador têm fila (a da própria etapa), da própria empresa.
 // Planejador e Superior não usam esta lista: devolve vazio (eles trabalham pela página do projeto).
-router.get('/demandas', exigirLogin, async (req, res) => {
+router.get('/demandas', ...exigirEmpresa, async (req, res) => {
   try {
     const etapa = ETAPA_DA_CATEGORIA[categoriaDe(req.usuario)]
     if (!etapa) return res.json([])
@@ -563,10 +718,10 @@ router.get('/demandas', exigirLogin, async (req, res) => {
     const [linhas] = await db.query(
       `SELECT d.id, d.projeto_id, d.rg, d.nome_material, d.quantidade, d.etapa_atual, d.planejador_id,
               p.nome AS projeto_nome
-         FROM demandas d JOIN projetos p ON p.id = d.projeto_id
-        WHERE d.etapa_atual = ? AND d.excluida_em IS NULL
+         FROM demandas d JOIN projetos p ON p.id = d.projeto_id AND p.organizacao_id = d.organizacao_id
+        WHERE d.organizacao_id = ? AND d.etapa_atual = ? AND d.excluida_em IS NULL
         ORDER BY d.id`,
-      [etapa]
+      [req.organizacaoId, etapa]
     )
     res.json(linhas)
   } catch (err) {
@@ -576,7 +731,8 @@ router.get('/demandas', exigirLogin, async (req, res) => {
 })
 
 // Carrega a demanda e já responde 400/404/403/409 quando não dá para seguir (devolve null nesses casos).
-// Só o Planejador que criou a demanda pode alterá-la; demandas excluídas ou finalizadas não mudam.
+// Demanda de outra empresa responde 404. Só o Planejador que criou a demanda pode alterá-la;
+// demandas excluídas ou finalizadas não mudam.
 async function carregarDemandaGerenciavel(req, res) {
   const id = Number(req.params.id)
   if (!Number.isInteger(id) || id <= 0) {
@@ -585,8 +741,8 @@ async function carregarDemandaGerenciavel(req, res) {
   }
 
   const [linhas] = await db.query(
-    'SELECT id, etapa_atual, planejador_id FROM demandas WHERE id = ? AND excluida_em IS NULL',
-    [id]
+    'SELECT id, etapa_atual, planejador_id FROM demandas WHERE id = ? AND organizacao_id = ? AND excluida_em IS NULL',
+    [id, req.organizacaoId]
   )
   const demanda = linhas[0]
   if (!demanda) {
@@ -595,12 +751,7 @@ async function carregarDemandaGerenciavel(req, res) {
   }
 
   if (categoriaDe(req.usuario) !== 'planejador' || demanda.planejador_id !== req.usuario.usuario_id) {
-    registrarEvento({
-      usuario_id: req.usuario.usuario_id,
-      acao: 'acesso_negado',
-      ip_origem: req.ip,
-      detalhe: `rota=${req.method} ${req.originalUrl} categoria_atual=${categoriaDe(req.usuario)}`
-    })
+    logar(req, 'acesso_negado', `rota=${req.method} ${req.originalUrl} categoria_atual=${categoriaDe(req.usuario)}`)
     res.status(403).json({ mensagem: 'Só o Planejador que criou a demanda pode alterá-la.' })
     return null
   }
@@ -614,7 +765,7 @@ async function carregarDemandaGerenciavel(req, res) {
 
 // Editar: corrige RG, material e quantidade e/ou destina a demanda para outro processo.
 // Ao voltar para um processo anterior, apaga quem já tinha concluído as etapas dali em diante.
-router.put('/demandas/:id', exigirLogin, limitadorEscrita, async (req, res) => {
+router.put('/demandas/:id', ...exigirEmpresa, limitadorEscrita, async (req, res) => {
   const campos = validarCamposDemanda(req.body, null)
   if (campos.erro) return res.status(400).json({ mensagem: campos.erro })
 
@@ -631,16 +782,14 @@ router.put('/demandas/:id', exigirLogin, limitadorEscrita, async (req, res) => {
 
     await db.query(
       `UPDATE demandas SET rg = ?, nome_material = ?, quantidade = ?, etapa_atual = ?, ${limpar}
-        WHERE id = ? AND excluida_em IS NULL`,
-      [campos.rg, campos.nome_material, campos.quantidade, etapa, demanda.id]
+        WHERE id = ? AND organizacao_id = ? AND excluida_em IS NULL`,
+      [campos.rg, campos.nome_material, campos.quantidade, etapa, demanda.id, req.organizacaoId]
     )
 
-    registrarEvento({
-      usuario_id: req.usuario.usuario_id,
-      acao: 'demanda_editada',
-      ip_origem: req.ip,
-      detalhe: `demanda_id=${demanda.id} etapa=${etapa}`
-    })
+    logar(req, 'demanda_editada', `demanda_id=${demanda.id} etapa=${etapa}`)
+    if (etapa !== demanda.etapa_atual) {
+      logar(req, 'demanda_redirecionada', `demanda_id=${demanda.id} de=${demanda.etapa_atual} para=${etapa}`)
+    }
 
     res.json({ mensagem: 'Demanda atualizada.' })
   } catch (err) {
@@ -650,22 +799,17 @@ router.put('/demandas/:id', exigirLogin, limitadorEscrita, async (req, res) => {
 })
 
 // "Excluir" move a demanda para a aba Excluídas (exclusão lógica): ela sai da fila, do projeto e das contagens.
-router.delete('/demandas/:id', exigirLogin, limitadorEscrita, async (req, res) => {
+router.delete('/demandas/:id', ...exigirEmpresa, limitadorEscrita, async (req, res) => {
   try {
     const demanda = await carregarDemandaGerenciavel(req, res)
     if (!demanda) return
 
     await db.query(
-      'UPDATE demandas SET excluida_em = NOW(), excluida_por = ? WHERE id = ? AND excluida_em IS NULL',
-      [req.usuario.usuario_id, demanda.id]
+      'UPDATE demandas SET excluida_em = NOW(), excluida_por = ? WHERE id = ? AND organizacao_id = ? AND excluida_em IS NULL',
+      [req.usuario.usuario_id, demanda.id, req.organizacaoId]
     )
 
-    registrarEvento({
-      usuario_id: req.usuario.usuario_id,
-      acao: 'demanda_excluida',
-      ip_origem: req.ip,
-      detalhe: `demanda_id=${demanda.id}`
-    })
+    logar(req, 'demanda_excluida', `demanda_id=${demanda.id}`)
 
     res.json({ mensagem: 'Demanda movida para Excluídas.' })
   } catch (err) {
@@ -674,14 +818,17 @@ router.delete('/demandas/:id', exigirLogin, limitadorEscrita, async (req, res) =
   }
 })
 
-router.patch('/demandas/:id/avancar', exigirLogin, limitadorEscrita, async (req, res) => {
+router.patch('/demandas/:id/avancar', ...exigirEmpresa, limitadorEscrita, async (req, res) => {
   const id = Number(req.params.id)
   if (!Number.isInteger(id) || id <= 0) {
     return res.status(400).json({ mensagem: 'Id inválido.' })
   }
 
   try {
-    const [linhas] = await db.query('SELECT id, etapa_atual FROM demandas WHERE id = ? AND excluida_em IS NULL', [id])
+    const [linhas] = await db.query(
+      'SELECT id, etapa_atual FROM demandas WHERE id = ? AND organizacao_id = ? AND excluida_em IS NULL',
+      [id, req.organizacaoId]
+    )
     const demanda = linhas[0]
     if (!demanda) {
       return res.status(404).json({ mensagem: 'Demanda não encontrada.' })
@@ -692,26 +839,23 @@ router.patch('/demandas/:id/avancar', exigirLogin, limitadorEscrita, async (req,
       return res.status(409).json({ mensagem: 'Essa demanda já está finalizada.' })
     }
     if (categoriaDe(req.usuario) !== regra.categoria) {
+      logar(req, 'acesso_negado', `rota=${req.method} ${req.originalUrl} categoria_atual=${categoriaDe(req.usuario)} categoria_exigida=${regra.categoria}`)
       return res.status(403).json({ mensagem: 'Sua categoria não permite avançar esta demanda no estado atual.' })
     }
 
     const finalizando = regra.proxima === 'finalizada'
     const [atualizacao] = await db.query(
       `UPDATE demandas SET etapa_atual = ?, ${regra.campo} = ?${finalizando ? ', finalizado_em = NOW()' : ''}
-        WHERE id = ? AND etapa_atual = ? AND excluida_em IS NULL`,
-      [regra.proxima, req.usuario.usuario_id, id, demanda.etapa_atual]
+        WHERE id = ? AND organizacao_id = ? AND etapa_atual = ? AND excluida_em IS NULL`,
+      [regra.proxima, req.usuario.usuario_id, id, req.organizacaoId, demanda.etapa_atual]
     )
     if (atualizacao.affectedRows === 0) {
       return res.status(409).json({ mensagem: 'Essa demanda já foi movida por outra pessoa. Atualize a página.' })
     }
 
+    logar(req, 'demanda_avancada', `demanda_id=${id} de=${demanda.etapa_atual} para=${regra.proxima}`)
     if (finalizando) {
-      registrarEvento({
-        usuario_id: req.usuario.usuario_id,
-        acao: 'demanda_concluida',
-        ip_origem: req.ip,
-        detalhe: `demanda_id=${id}`
-      })
+      logar(req, 'demanda_concluida', `demanda_id=${id}`)
     }
 
     res.json({ mensagem: 'Demanda avançou para: ' + regra.proxima })
@@ -721,29 +865,24 @@ router.patch('/demandas/:id/avancar', exigirLogin, limitadorEscrita, async (req,
   }
 })
 
-// ---------- INDICADORES, REGRESSÃO, PERFIL, etc ----------
-// Mantidos sem alterações
-
-// Indicadores (plano Expert): demandas por processo e concluídas x pendentes.
-// O admin vê tudo; os demais veem as demandas dos projetos que criaram ou que eles mesmos cadastraram.
-// Demandas excluídas não contam. "Pendentes" = as que ainda estão em algum processo (não finalizadas).
+// ---------- INDICADORES ----------
+// Indicadores (plano Expert): demandas por processo e concluídas x pendentes, SEMPRE da própria empresa
+// (nem o admin escapa do filtro). Demandas excluídas não contam.
+// "Pendentes" = as que ainda estão em algum processo (não finalizadas).
 const PROCESSOS_INDICADORES = [
   { processo: 'almoxarifado', rotulo: 'Almoxarifado' },
   { processo: 'operacao', rotulo: 'Operação' },
   { processo: 'montagem', rotulo: 'Montagem' }
 ]
 
-router.get('/indicadores', exigirLogin, exigirNivel('expert'), async (req, res) => {
+router.get('/indicadores', ...exigirEmpresa, exigirNivel('expert'), async (req, res) => {
   try {
-    const admin = ehAdmin(req)
-    const uid = req.usuario.usuario_id
-
     const [porEtapa] = await db.query(
       `SELECT d.etapa_atual AS etapa, COUNT(*) AS total
-         FROM demandas d JOIN projetos p ON p.id = d.projeto_id
-        WHERE d.excluida_em IS NULL ${admin ? '' : 'AND (p.criado_por = ? OR d.planejador_id = ?)'}
+         FROM demandas d
+        WHERE d.organizacao_id = ? AND d.excluida_em IS NULL
         GROUP BY d.etapa_atual`,
-      admin ? [] : [uid, uid]
+      [req.organizacaoId]
     )
     const contagem = {}
     porEtapa.forEach(l => { contagem[l.etapa] = Number(l.total) })
@@ -754,8 +893,8 @@ router.get('/indicadores', exigirLogin, exigirNivel('expert'), async (req, res) 
 
     const [[projetos]] = await db.query(
       `SELECT SUM(p.status = 'ativo') AS ativos, SUM(p.status = 'concluido') AS concluidos
-         FROM projetos p WHERE 1 = 1 ${admin ? '' : 'AND p.criado_por = ?'}`,
-      admin ? [] : [uid]
+         FROM projetos p WHERE p.organizacao_id = ?`,
+      [req.organizacaoId]
     )
 
     res.json({
@@ -774,9 +913,12 @@ router.get('/indicadores', exigirLogin, exigirNivel('expert'), async (req, res) 
   }
 })
 
+// ---------- REGRESSÃO (previsão de equipe) ----------
+// O modelo é guardado por usuário; a conta precisa ter empresa para usar.
+
 const ANALISE = '/analise/previsao-equipe'
 const uploadCsv = multer({ storage: multer.memoryStorage(), limits: { fileSize: 2 * 1024 * 1024 } })
-const soExpert = [exigirLogin, exigirNivel('expert')]
+const soExpert = [...exigirEmpresa, exigirNivel('expert')]
 
 async function chamarRegressao(metodo, caminho, corpo) {
   try {
@@ -821,12 +963,7 @@ router.post(`${ANALISE}/treinar`, ...soExpert, limitadorEscrita, uploadCsv.singl
     entradas
   })
   if (r.status === 200) {
-    registrarEvento({
-      usuario_id: req.usuario.usuario_id,
-      acao: 'modelo_treinado',
-      ip_origem: req.ip,
-      detalhe: `alvo=${req.body.alvo} entradas=${entradas.length} linhas=${r.dados.n_linhas}`
-    })
+    logar(req, 'modelo_treinado', `alvo=${req.body.alvo} entradas=${entradas.length} linhas=${r.dados.n_linhas}`)
   }
   res.status(r.status).json(r.dados)
 })
@@ -839,12 +976,7 @@ router.get(`${ANALISE}/modelo`, ...soExpert, async (req, res) => {
 router.post(`${ANALISE}/prever`, ...soExpert, limitadorEscrita, async (req, res) => {
   const r = await chamarRegressao('POST', '/prever', { usuario_id: req.usuario.usuario_id, valores: req.body.valores })
   if (r.status === 200) {
-    registrarEvento({
-      usuario_id: req.usuario.usuario_id,
-      acao: 'previsao_consultada',
-      ip_origem: req.ip,
-      detalhe: `funcionarios=${r.dados.funcionarios}`
-    })
+    logar(req, 'previsao_consultada', `funcionarios=${r.dados.funcionarios}`)
   }
   res.status(r.status).json(r.dados)
 })
@@ -853,6 +985,8 @@ router.delete(`${ANALISE}/modelo`, ...soExpert, limitadorEscrita, async (req, re
   const r = await chamarRegressao('DELETE', `/modelo?usuario_id=${req.usuario.usuario_id}`)
   res.status(r.status).json(r.dados)
 })
+
+// ---------- PAGAMENTOS ----------
 
 router.post('/assinatura/checkout', exigirLogin, limitadorEscrita, async (req, res) => {
   try {
@@ -874,6 +1008,8 @@ router.post('/assinatura/checkout', exigirLogin, limitadorEscrita, async (req, r
   }
 })
 
+// ---------- LOGS (só admin do produto) ----------
+
 router.get('/logs', exigirLogin, exigirNivel('admin'), async (req, res) => {
   try {
     const params = new URLSearchParams({ limit: String(req.query.limit || 50) })
@@ -889,12 +1025,25 @@ router.get('/logs', exigirLogin, exigirNivel('admin'), async (req, res) => {
   }
 })
 
+// ---------- PERFIL ----------
+// Só se vê o perfil (e a foto) de quem é da MESMA empresa. Outra empresa responde 404.
+
 function sincronizarNome(usuarioId, nome) {
   fetch(`${PROFILE_URL}/perfis/${usuarioId}/nome`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ nome })
   }).catch(err => console.error('Falha ao sincronizar nome no profile-service:', err.message))
+}
+
+async function mesmaEmpresa(req, usuarioId) {
+  const id = Number(usuarioId)
+  if (!Number.isInteger(id) || id <= 0) return false
+  const [[u]] = await db.query(
+    'SELECT id FROM usuarios WHERE id = ? AND organizacao_id = ?',
+    [id, req.organizacaoId]
+  )
+  return Boolean(u)
 }
 
 router.get('/perfil/me', exigirLogin, async (req, res) => {
@@ -916,18 +1065,21 @@ router.get('/perfil/me', exigirLogin, async (req, res) => {
   }
 })
 
-router.get('/perfil/:usuario_id', exigirLogin, async (req, res) => {
+router.get('/perfil/:usuario_id', ...exigirEmpresa, async (req, res) => {
   try {
-    const usuarioId = req.params.usuario_id
+    if (!(await mesmaEmpresa(req, req.params.usuario_id))) {
+      return res.status(404).json({ mensagem: 'Perfil não encontrado.' })
+    }
+    const usuarioId = Number(req.params.usuario_id)
 
     const respostaPerfil = await fetch(`${PROFILE_URL}/perfis/${usuarioId}`).then(r => r.json())
 
     res.json({
-      usuario_id: Number(usuarioId),
+      usuario_id: usuarioId,
       nome: respostaPerfil.nome,
       bio: respostaPerfil.bio,
       foto_url: respostaPerfil.temFoto ? `/api/perfil/${usuarioId}/foto` : null,
-      eh_proprio_perfil: Number(usuarioId) === req.usuario.usuario_id
+      eh_proprio_perfil: usuarioId === req.usuario.usuario_id
     })
   } catch (err) {
     console.error(err)
@@ -976,16 +1128,21 @@ router.post('/perfil/:usuario_id/foto', exigirLogin, exigirProprioPerfil, limita
   }
 })
 
-router.get('/perfil/:usuario_id/foto', exigirLogin, async (req, res) => {
+router.get('/perfil/:usuario_id/foto', ...exigirEmpresa, async (req, res) => {
   try {
-    const resposta = await fetch(`${PROFILE_URL}/perfis/${req.params.usuario_id}/foto-arquivo`)
+    if (!(await mesmaEmpresa(req, req.params.usuario_id))) {
+      return res.status(404).end()
+    }
+    const usuarioId = Number(req.params.usuario_id)
+
+    const resposta = await fetch(`${PROFILE_URL}/perfis/${usuarioId}/foto-arquivo`)
 
     if (!resposta.ok) {
       return res.status(resposta.status).end()
     }
 
     res.set('Content-Type', resposta.headers.get('content-type') || 'image/jpeg')
-    res.set('Cache-Control', 'private, max-age=60') 
+    res.set('Cache-Control', 'private, max-age=60')
     Readable.fromWeb(resposta.body).pipe(res)
   } catch (err) {
     console.error(err)

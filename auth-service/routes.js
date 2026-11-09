@@ -34,10 +34,32 @@ const limitadorSensivel = rateLimit({
   legacyHeaders: false
 })
 
+// Só o app (que valida empresa e código) pode dizer a qual empresa a conta pertence
+function chaveInternaValida(req) {
+  const esperada = process.env.INTERNAL_API_KEY
+  const recebida = req.get('x-internal-key')
+  if (!esperada || !recebida) return false
+  const a = Buffer.from(esperada)
+  const b = Buffer.from(recebida)
+  return a.length === b.length && crypto.timingSafeEqual(a, b)
+}
+
 // ---------- CADASTRO ----------
 router.post('/cadastro', async (req, res) => {
   const { nome, email, senha } = req.body
   const categoria = req.body.categoria || 'superior'
+
+  // organizacao_id só vale se vier do app com a chave interna; de qualquer outra origem é recusado
+  let organizacaoId = null
+  if (req.body.organizacao_id !== undefined && req.body.organizacao_id !== null) {
+    if (!chaveInternaValida(req)) {
+      return res.status(403).json({ mensagem: 'Acesso negado.' })
+    }
+    organizacaoId = Number(req.body.organizacao_id)
+    if (!Number.isInteger(organizacaoId) || organizacaoId <= 0) {
+      return res.status(400).json({ mensagem: 'Empresa inválida.' })
+    }
+  }
 
   if (!nome || !email || !senha) {
     return res.status(400).json({ mensagem: 'Preencha nome, e-mail e senha.' })
@@ -57,8 +79,8 @@ router.post('/cadastro', async (req, res) => {
 
     // todo usuário novo nasce no papel mais baixo da hierarquia (professional < expert < admin)
     await db.query(
-      'INSERT INTO usuarios (nome, email, senha_hash, role, categoria) VALUES (?, ?, ?, ?, ?)',
-      [nome, email, senhaHash, 'professional', categoria]
+      'INSERT INTO usuarios (nome, email, senha_hash, role, categoria, organizacao_id) VALUES (?, ?, ?, ?, ?, ?)',
+      [nome, email, senhaHash, 'professional', categoria, organizacaoId]
     )
 
     res.status(201).json({ mensagem: 'Conta criada com sucesso.' })
