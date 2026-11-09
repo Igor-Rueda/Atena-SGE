@@ -28,7 +28,17 @@
             <option value="operador">Operador</option>
             <option value="montador">Montador</option>
           </select>
-          <span class="campo__ajuda">Superior coordena tudo. Planejador, Almoxarife, Operador e Montador atuam em um processo.</span>
+          <span class="campo__ajuda">Superior cria a empresa e coordena os projetos. Planejador, Almoxarife, Operador e Montador entram numa empresa que já existe.</span>
+        </div>
+        <div class="campo">
+          <label for="empresa">Nome da empresa</label>
+          <input type="text" id="empresa" name="empresa" required minlength="2" maxlength="150" autocomplete="organization">
+          <span class="campo__ajuda" id="ajuda-empresa"></span>
+        </div>
+        <div class="campo" id="campo-codigo" hidden>
+          <label for="codigo-empresa">Código da empresa</label>
+          <input type="text" id="codigo-empresa" name="codigo_empresa" maxlength="16" autocomplete="off" autocapitalize="characters" spellcheck="false">
+          <span class="campo__ajuda">Peça o código ao Superior da sua empresa: ele aparece no botão Equipe, na lista de projetos.</span>
         </div>
         <div class="campo">
           <label for="senha">Senha</label>

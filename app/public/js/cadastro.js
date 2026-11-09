@@ -1,5 +1,22 @@
 const form = document.getElementById('form-cadastro')
 const mensagemErro = document.getElementById('mensagem-erro')
+const categoria = document.getElementById('categoria')
+const campoCodigo = document.getElementById('campo-codigo')
+const codigoEmpresa = document.getElementById('codigo-empresa')
+const ajudaEmpresa = document.getElementById('ajuda-empresa')
+
+// O Superior cria a empresa; as demais categorias entram numa empresa existente e precisam do código dela.
+function ajustarCampos() {
+  const superior = categoria.value === 'superior'
+  campoCodigo.hidden = superior
+  codigoEmpresa.required = !superior
+  if (superior) codigoEmpresa.value = ''
+  ajudaEmpresa.textContent = superior
+    ? 'A empresa será criada com este nome, e só a sua equipe verá os dados dela.'
+    : 'Digite o nome da empresa exatamente como o Superior a cadastrou.'
+}
+categoria.addEventListener('change', ajustarCampos)
+ajustarCampos()
 
 form.addEventListener('submit', async (evento) => {
   evento.preventDefault()
@@ -9,8 +26,10 @@ form.addEventListener('submit', async (evento) => {
     nome: document.getElementById('nome').value,
     email: document.getElementById('email').value,
     senha: document.getElementById('senha').value,
-    categoria: document.getElementById('categoria').value
+    categoria: categoria.value,
+    empresa: document.getElementById('empresa').value.trim()
   }
+  if (categoria.value !== 'superior') dados.codigo_empresa = codigoEmpresa.value.trim()
 
   try {
     const resposta = await fetch('/api/auth/cadastro', {
