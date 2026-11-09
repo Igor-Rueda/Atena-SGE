@@ -130,6 +130,8 @@ Cada usuário tem uma **categoria**, mostrada no menu. As permissões valem **na
 | **Operador** | Conclui a etapa Operação (fabricação) e envia para a Montagem. | Minhas demandas |
 | **Montador** | Conclui a Montagem: a demanda fica **Finalizada**. | Minhas demandas |
 
+**Cadastro e empresa:** quem se cadastra digita o **nome da empresa**. O **Superior** cria a empresa (o nome é único) e passa a ser o dono dela. Planejador, Almoxarife, Operador e Montador informam o nome da empresa **e o código dela**, que o Superior vê no botão *Equipe* da lista de projetos e pode renovar. Só o nome não basta: sem o código, qualquer pessoa que soubesse o nome entraria na empresa de outra.
+
 **Fluxo da demanda:** o Planejador cadastra (RG, material, quantidade) e ela entra no **Almoxarifado**, depois **Operação**, depois **Montagem**, depois **Finalizada**. Cada etapa só é avançada pela categoria dona dela.
 
 Regras:
@@ -140,29 +142,32 @@ Regras:
 - **Concluir ou excluir um projeto** com demandas que a Montagem ainda não concluiu abre um aviso pedindo confirmação. Ao concluir, as pendentes são encerradas sem passar pela Montagem e **não** entram na "demanda do mês" da previsão. Ao excluir, as demandas do projeto são apagadas junto.
 - A página *Minhas demandas* existe só para Almoxarife, Operador e Montador. Superior e Planejador não a veem.
 
-### 8.3 Isolamento entre contas (multi-tenancy)
+### 8.3 Isolamento entre empresas (multi-tenancy)
 
-**Regra do produto:** cada empresa (organização) só enxerga e altera os próprios dados. Isso precisa valer na API: trocar o ID na URL não pode devolver o registro de outra empresa.
+**Regra do produto:** cada empresa só enxerga e altera os próprios dados. Isso vale na API, não na tela: trocar o ID na URL não devolve o registro de outra empresa.
 
-**Situação atual: ainda não implementada** (issue 16). Hoje não existe o conceito de organização: cada usuário é uma conta solta, a lista de projetos mostra todos os projetos do banco, qualquer pessoa autenticada abre o projeto de outra pela URL, e a fila de cada etapa junta as demandas de todas as contas. O que já está protegido é a *escrita* sobre projetos e demandas (só o dono edita, exclui ou conclui).
+**Como funciona:**
 
-**Desenho previsto:**
+- Cada usuário pertence a **uma** empresa (`usuarios.organizacao_id`). Projetos e demandas também carregam o `organizacao_id`.
+- A empresa da pessoa é lida **do banco a cada requisição**, depois de validar o token. Ela nunca vem do cliente nem do token, e uma conta sem empresa é barrada (`403`).
+- **Toda** consulta e ação filtra pela empresa: projetos, demandas, fila, indicadores e perfis. Um ID de outra empresa responde **`404`** (e não `403`, para não revelar que ele existe).
+- A empresa também fica no log (`org=...`) de cada evento.
+- As permissões por categoria (8.2) valem **dentro** da empresa.
 
-- Tabela `organizacoes`, com `organizacao_id` em `usuarios`, `projetos` e `demandas`, e a organização como claim do JWT.
-- Toda consulta e toda ação filtra por `organizacao_id` vindo do JWT, nunca do cliente. Registro de outra organização responde `404`.
-- Quem cria conta pelo cadastro público vira **Superior** de uma organização nova. As demais categorias só entram por **convite** do Superior (issue 17), o que também fecha a brecha atual de qualquer pessoa se cadastrar como Superior.
-- Decisão em aberto: o plano (Professional/Expert) passa a ser da organização, e todos os membros herdam o papel do plano.
+**Verificado** num teste de integração com a API real contra o MariaDB (80 verificações), cobrindo cadastro, papéis, tentativas de abrir, editar, excluir, concluir e avançar IDs de outra empresa, e o log das movimentações. Esse teste ainda não roda no CI (issue 25).
+
+**Decisão em aberto:** o plano (Professional/Expert) continua sendo da **conta**, e os limites do Professional contam por conta. Faz sentido passar o plano para a empresa, com os membros herdando o papel (issue 26).
 
 ## 9. Mapa de reaproveitamento
 
 | Peça do projeto anterior | O que vira no Atenas SGE |
 |---|---|
-| Catálogo de filmes (TMDB) | Recurso principal: **projetos** e **demandas** (RG, material, quantidade) que percorrem os processos. Já não há filmes nem chave do TMDB no código da API; a limpeza do banco e das variáveis está na issue 22 |
+| Catálogo de filmes (TMDB) | Recurso principal: **projetos** e **demandas** (RG, material, quantidade) que percorrem os processos. Os filmes e a chave do TMDB saíram do projeto |
 | Tier list dos stalkers | **Análise** (Expert): previsão de equipe por CSV e indicadores |
 | Serviço e pasta `catalogo` | Renomeado para **`app`**: continua sendo o único serviço público e a porta de entrada dos demais serviços |
 | Login + RBAC | Papéis do plano `professional` < `expert` < `admin` (cumulativos) e, em paralelo, a **categoria** do usuário (papéis do negócio). O `exigirNivel` e o padrão de claims no JWT continuam, e `exigirCategoria` confere a categoria |
-| Logs e auditoria (Redis) | Eventos de negócio: `projeto_criado`, `projeto_editado`, `projeto_excluido`, `projeto_concluido`, `demanda_criada`, `demanda_editada`, `demanda_excluida`, `demanda_concluida`, `modelo_treinado`, `previsao_consultada`, `limite_plano_atingido`, `acesso_negado` e outros. Consulta restrita ao `admin` |
-| Upload e perfil (Garage) | Foto e bio do usuário. O anexo ligado ao registro do negócio (desenho técnico ou foto da peça, por demanda) está na issue 18 |
+| Logs e auditoria (Redis) | Eventos de negócio, com quem fez, quando e a empresa: `empresa_criada`, `membro_cadastrado`, `codigo_empresa_renovado`, `projeto_criado`, `projeto_editado`, `projeto_excluido`, `projeto_concluido`, `demanda_criada`, `demanda_editada`, `demanda_excluida`, **`demanda_avancada`** (cada passagem de etapa, com `de` e `para`), **`demanda_redirecionada`** (quando o Planejador destina a outro processo), `demanda_concluida`, `modelo_treinado`, `previsao_consultada`, `limite_plano_atingido`, `acesso_negado` e outros. Consulta restrita ao `admin` |
+| Upload e perfil (Garage) | Perfil corporativo: foto e bio do usuário |
 | Plano Premium (Stripe) | Plano Expert único: o pagamento muda o papel de `professional` para `expert` |
 | CI/CD (GitHub Actions) | Continua valendo: build, teste e publicação das imagens a cada push |
 | **Novo:** microsserviço de regressão | Serviço isolado (Python): lê o CSV, treina a regressão com as colunas escolhidas, guarda o modelo por usuário e devolve a previsão |
@@ -179,12 +184,12 @@ Regras:
 | `regressao` | Treino e previsão (Python) | não |
 | MariaDB | Banco compartilhado (remoto) | externo |
 
-Telas do `app`: **Início** (guia da interface), **Projetos**, **Projeto** (dados no topo, demandas, e para o Planejador a aba *Excluídas*), **Minhas demandas** (só Almoxarife, Operador e Montador), **Análise** (abas *Previsão de equipe* e *Indicadores*, só Expert), **Planos** e **Perfil**, além de login, cadastro e recuperação de senha. A **landing page pública** ainda falta (issue 19). O CSS é dividido em `tokens`, `base`, `componentes`, `layout`, `auth` e um arquivo por página.
+Telas do `app`: **Início** (guia da interface), **Projetos**, **Projeto** (dados no topo, demandas, e para o Planejador a aba *Excluídas*; o Superior ainda tem o botão *Equipe*, com o código da empresa, na lista de projetos), **Minhas demandas** (só Almoxarife, Operador e Montador), **Análise** (abas *Previsão de equipe* e *Indicadores*, só Expert), **Planos** e **Perfil**, além de login, cadastro e recuperação de senha. A landing page pública abre sem login. O CSS é dividido em `tokens`, `base`, `componentes`, `layout`, `auth` e um arquivo por página.
 
 ## 11. Como rodar (resumo)
 
 1. Copie `env.example` para `.env` e preencha os valores (segredos, banco, SMTP, Stripe, Garage).
-2. No MariaDB, rode os scripts de `banco/` em ordem: `01-schema.sql`, `02-migracao.sql` (só num banco já em uso), `03-admin-e-exemplos.sql` (opcional: promove uma conta a `admin` ou `expert` para testes) e `04-demandas-excluidas.sql` (colunas de finalização e exclusão lógica). **Atenção:** hoje a ordem importa e alguns trechos do `02` estão obsoletos; a issue 21 consolida tudo num script que recria o banco do zero.
+2. No MariaDB, rode os scripts de `db/` em ordem: `001_dominio.sql` cria (ou atualiza, sem apagar nada) empresas, projetos, demandas e o modelo de regressão, e pode ser repetido; `002_seed.sql` é opcional e cria duas empresas de exemplo (Metalúrgica Alfa e Usinagem Beta) com projetos e demandas em todas as etapas, para ver o isolamento funcionando (as instruções estão no começo do arquivo). Num banco que já tinha dados, o `001` coloca todas as contas existentes numa "Empresa de teste (legado)". O `03-admin-e-exemplos.sql` (promove uma conta a `admin` ou `expert` para testes) continua valendo. Os scripts antigos de `banco/` (`02-migracao.sql` e o que apagava `demandas`) não devem mais ser usados.
 3. Para a foto de perfil, suba o Garage e rode o `init-garage.sh` (veja o README do `upload-profile`). Sem isso, o resto funciona.
 4. Para o pagamento, crie no Stripe (modo de teste) um preço mensal de R$ 149, copie o ID `price_...` para `STRIPE_PRICE_EXPERT` e cadastre o webhook com os eventos `checkout.session.completed` e `customer.subscription.deleted`.
 5. `docker compose up --build` e abra `http://localhost:3000`.
@@ -193,23 +198,23 @@ O `docker-compose.portainer.yml` é a versão para a stack do Portainer, e o `do
 
 ## 12. Status e próximos passos
 
-O código desta versão foi escrito mas **ainda não foi testado de ponta a ponta**. As issues deste repositório trazem o que está feito, o que está pendente e um roteiro de teste.
+O isolamento entre empresas, o cadastro com empresa, o log das movimentações e os scripts de banco foram **verificados** num teste de integração (API real contra MariaDB 10.11, com o auth-service simulado). O que ainda **não** foi testado de ponta a ponta é o conjunto no ambiente real (stack no Portainer, auth-service, Stripe, Garage e telas no navegador). As issues deste repositório trazem o que está feito, o que está pendente e o roteiro de teste.
 
-**O principal risco hoje é o isolamento entre contas** (seção 8.3): sem ele, o produto não pode receber mais de uma empresa no mesmo sistema. A ordem recomendada é: organizações e convites (issues 16 e 17), anexos ligados à demanda (18), landing page (19), publicação na stack (20), scripts de banco reproduzíveis (21) e limpeza do projeto de filmes (22). Depois disso vem o teste de ponta a ponta (25).
+**Pendências principais:** a decisão de quem é dono do plano (issue 26), colocar os testes de isolamento no CI e executar o roteiro de ponta a ponta no ambiente real (issue 25).
 
 ## 13. Requisitos de SaaS multi-tenant: situação
 
-Verificação feita sobre o código da API e das telas do `app`. Os serviços `auth-service`, `log-service` e `profile-service`, os arquivos de compose e o `banco/01-schema.sql` **não foram inspecionados** nesta revisão; onde dependem deles, a situação aparece como "a conferir".
+Verificação feita sobre o código da API, das telas do `app` e dos scripts de `db/`. Os serviços `auth-service`, `log-service` e `profile-service` e os arquivos de compose **não foram inspecionados**; os itens 1, 3, 4, 8, 9 e 10 foram confirmados pelo responsável pelo projeto.
 
 | # | Requisito | Situação | Observação |
 |---|---|---|---|
-| 1 | Stack aponta para o repositório novo | A conferir | Ação manual no Portainer (issue 20) |
-| 2 | Modelagem com 3+ tabelas e script versionado | Parcial | Há `projetos`, `demandas` e `modelos_regressao`, mas os scripts divergem entre si; falta consolidar e acrescentar `organizacoes` e `anexos_demanda` (issues 21, 16 e 18) |
-| 3 | API com CRUD do recurso principal | Atende (não testado) | Projetos: listar, criar, detalhar, editar e remover. Demandas: criar, editar, excluir e avançar. Swagger é extra e não foi visto |
-| 4 | Telas do recurso principal | Atende (não testado) | Listar, criar, detalhar e editar projetos; gerir demandas na página do projeto |
-| 5 | Papéis do negócio com 403 na API | Atende, com ressalva | Cinco categorias valendo na API. Ressalva: a categoria é escolhida no cadastro, então qualquer pessoa pode se cadastrar como Superior (issue 17) |
-| 6 | Isolamento por usuário ou organização | **Não atende** | Lista e detalhe de projeto, e a fila, não filtram por dono (issue 16) |
-| 7 | Eventos de negócio no log | Parcial | Criação, edição, exclusão e conclusão são registradas; faltam as passagens intermediárias de etapa (issue 23) |
-| 8 | Upload ligado ao registro do negócio | **Não atende** | Só existe foto de perfil; falta o anexo da demanda (issue 18) |
-| 9 | Landing page pública | **Não atende** | Issue 19 |
-| 10 | Nada de Tom Hanks | Parcial | A API está limpa; faltam tabelas antigas no banco e a chave do TMDB nas variáveis (issue 22) |
+| 1 | Stack aponta para o repositório novo | Atende (confirmado) | |
+| 2 | Modelagem com 3+ tabelas e script versionado | Atende | `db/001_dominio.sql` (empresas, projetos, demandas, modelo de regressão, com chaves estrangeiras e índices) e `db/002_seed.sql`; testados em banco novo e em banco com dados, repetindo a execução |
+| 3 | API com CRUD do recurso principal | Atende (confirmado) | Projetos: listar, criar, detalhar, editar e remover. Demandas: criar, editar, excluir e avançar |
+| 4 | Telas do recurso principal | Atende (confirmado) | |
+| 5 | Papéis do negócio com 403 na API | Atende | Cinco categorias valendo na API. A categoria Superior só nasce com a criação de uma empresa; as demais exigem o código dela |
+| 6 | Isolamento por usuário ou organização | Atende (verificado em teste de integração) | Tudo filtrado pela empresa; ID de outra empresa responde `404`. O formulário de cadastro já pede a empresa e o código. Falta rodar o teste no CI |
+| 7 | Eventos de negócio no log | Atende | Inclui `demanda_avancada` em cada passagem de etapa e `demanda_redirecionada`, todos com quem, quando e a empresa. Login e erro ficam com o `auth-service` (a conferir) |
+| 8 | Upload ligado ao domínio | Atende (confirmado) | Perfil corporativo: foto e bio no storage S3 (Garage) |
+| 9 | Landing page pública | Atende (confirmado) | |
+| 10 | Nada de Tom Hanks | Atende (confirmado) | |
