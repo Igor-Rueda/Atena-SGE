@@ -92,9 +92,33 @@ form.addEventListener('submit', async function (evento) {
   if (r.ok) window.location.href = 'projeto.html?id=' + r.dados.id; // já abre o projeto novo
 });
 
+// Código da empresa: o Superior passa à equipe, que o digita (com o nome da empresa) no cadastro.
+async function mostrarEquipe() {
+  const r = await Atenas.api('/api/organizacao');
+  if (!r.ok) return;
+  const d = r.dados;
+  const renovar = await Atenas.modal({
+    titulo: 'Equipe de ' + d.nome,
+    texto: 'Código da empresa: ' + d.codigo + '. Quem não é Superior informa o nome da empresa e este código ao se cadastrar. ' +
+      'Hoje há ' + d.membros + (d.membros === 1 ? ' pessoa' : ' pessoas') + ' na empresa. ' +
+      'Gerar um novo código faz o atual parar de valer para novos cadastros.',
+    confirmar: 'Gerar novo código',
+    cancelar: 'Fechar',
+  });
+  if (!renovar) return;
+  const nova = await Atenas.api('/api/organizacao/codigo', { method: 'POST' });
+  if (nova.ok) { Atenas.aviso('Código renovado.', 'sucesso'); mostrarEquipe(); }
+}
+
 Atenas.pronto.then(function () {
-  // Só o Superior cadastra projetos
+  // Só o Superior cadastra projetos e cuida da equipe
   const podeCriar = ehSuperior();
+  if (podeCriar) {
+    const botaoEquipe = el('button', 'Equipe', 'botao botao--secundario');
+    botaoEquipe.type = 'button';
+    botaoEquipe.addEventListener('click', mostrarEquipe);
+    document.getElementById('btn-novo').before(botaoEquipe);
+  }
   document.getElementById('btn-novo').hidden = !podeCriar;
   document.getElementById('btn-vazio-novo').hidden = !podeCriar;
   if (!podeCriar) form.hidden = true;

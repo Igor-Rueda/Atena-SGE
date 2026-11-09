@@ -309,7 +309,7 @@
     if (avatar) avatar.textContent = iniciais;
     if (nomeEl) nomeEl.textContent = nome || 'Usuário';
     const categoriaEl = document.getElementById('usuario-categoria');
-    if (categoriaEl) categoriaEl.textContent = rotuloCategoria(me.categoria);
+    if (categoriaEl) categoriaEl.textContent = rotuloCategoria(me.categoria) + (me.empresa ? ' · ' + me.empresa : '');
     if (papelEl) {
       papelEl.textContent = rotuloPapel(me.role);
       if (me.role === 'expert' || me.role === 'admin') papelEl.classList.add('etiqueta--expert');
@@ -328,6 +328,16 @@
     const resposta = await fetch('/api/me');
     if (resposta.status === 401) {
       window.location.href = '/login.html';
+      return new Promise(function () {});
+    }
+    if (resposta.status === 403) {
+      // conta sem empresa: avisa e volta ao login (sem empresa nenhum dado pode ser mostrado)
+      const erro = await resposta.json().catch(function () { return {}; });
+      aviso(erro.mensagem || 'Acesso negado.');
+      setTimeout(async function () {
+        try { await fetch('/api/auth/logout', { method: 'POST' }); } catch (e) { /* segue para o login */ }
+        window.location.href = '/login.html';
+      }, 3500);
       return new Promise(function () {});
     }
     const me = await resposta.json();
