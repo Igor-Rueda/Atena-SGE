@@ -52,11 +52,36 @@ function ehAdmin(req) {
 function logar(req, acao, detalhe) {
   const org = `org=${req.organizacaoId ?? '-'}`
   registrarEvento({
-    usuario_id: req.usuario.usuario_id,
+    usuario_id: req.usuario ? req.usuario.usuario_id : null,
     acao,
     ip_origem: req.ip,
     detalhe: detalhe ? `${detalhe} ${org}` : org
   })
+}
+
+// Erro inesperado: vai para o console e para o log de auditoria, e a resposta é 500
+function erroInterno(req, res, err, mensagem) {
+  console.error(err)
+  logar(req, 'erro_interno', `rota=${req.method} ${req.originalUrl} erro=${String((err && err.message) || err).slice(0, 150)}`)
+  return res.status(500).json({ mensagem })
+}
+
+// Tentativa de acessar o registro de OUTRA empresa: a resposta continua 404 (não revela que existe),
+// mas o evento fica no log. tabela é sempre um literal do código: projetos, demandas ou usuarios.
+async function registrarOutraEmpresa(req, tabela, id) {
+  const numero = Number(id)
+  if (!Number.isInteger(numero) || numero <= 0) return
+  try {
+    const [[achou]] = await db.query(
+      `SELECT 1 AS existe FROM ${tabela} WHERE id = ? AND organizacao_id <> ?`,
+      [numero, req.organizacaoId]
+    )
+    if (achou) {
+      logar(req, 'acesso_negado', `rota=${req.method} ${req.originalUrl} motivo=outra_empresa recurso=${tabela}:${numero}`)
+    }
+  } catch (err) {
+    console.error('Falha ao registrar acesso a outra empresa:', err.message)
+  }
 }
 
 // ---------- AUTENTICAÇÃO E EMPRESA ----------
@@ -91,8 +116,7 @@ async function carregarEmpresa(req, res, next) {
     req.usuario.categoria = u.categoria // a categoria do banco vale mais que a do token
     next()
   } catch (err) {
-    console.error(err)
-    res.status(500).json({ mensagem: 'Erro ao validar a empresa.' })
+    return erroInterno(req, res, err, 'Erro ao validar a empresa.')
   }
 }
 
@@ -125,6 +149,7 @@ function exigirCategoria(categorias, mensagem) {
 
 function exigirProprioPerfil(req, res, next) {
   if (String(req.params.usuario_id) !== String(req.usuario.usuario_id)) {
+    logar(req, 'acesso_negado', `rota=${req.method} ${req.originalUrl} motivo=perfil_de_outra_pessoa`)
     return res.status(403).json({ mensagem: 'Você só pode editar o seu próprio perfil.' })
   }
   next()
@@ -191,8 +216,7 @@ router.get('/me', exigirLogin, async (req, res) => {
       empresa: u ? u.empresa : null
     })
   } catch (err) {
-    console.error(err)
-    res.status(500).json({ mensagem: 'Erro ao buscar o usuário.' })
+    return erroInterno(req, res, err, 'Erro ao buscar o usuário.')
   }
 })
 
@@ -210,10 +234,10 @@ router.get('/organizacao', ...exigirEmpresa, exigirCategoria(['superior'], 'Só 
       [req.organizacaoId]
     )
     if (!org) return res.status(404).json({ mensagem: 'Empresa não encontrada.' })
+    logar(req, 'codigo_empresa_consultado')
     res.json({ id: org.id, nome: org.nome, codigo: org.codigo_convite })
   } catch (err) {
-    console.error(err)
-    res.status(500).json({ mensagem: 'Erro ao buscar a empresa.' })
+    return erroInterno(req, res, err, 'Erro ao buscar a empresa.')
   }
 })
 
@@ -225,8 +249,7 @@ router.post('/organizacao/codigo', ...exigirEmpresa, exigirCategoria(['superior'
     logar(req, 'codigo_empresa_renovado')
     res.json({ codigo })
   } catch (err) {
-    console.error(err)
-    res.status(500).json({ mensagem: 'Erro ao renovar o código.' })
+    return erroInterno(req, res, err, 'Erro ao renovar o código.')
   }
 })
 
@@ -279,6 +302,7 @@ router.post('/auth/cadastro', limitadorCadastro, async (req, res) => {
         criouEmpresa = true
       } catch (err) {
         if (err.code === 'ER_DUP_ENTRY') {
+          registrarEvento({ usuario_id: null, acao: 'cadastro_recusado', ip_origem: req.ip, detalhe: 'motivo=empresa_ja_existe categoria=superior' })
           return res.status(409).json({ mensagem: 'Já existe uma empresa com esse nome.' })
         }
         throw err
@@ -288,6 +312,7 @@ router.post('/auth/cadastro', limitadorCadastro, async (req, res) => {
         ? await db.query('SELECT id FROM organizacoes WHERE nome = ? AND codigo_convite = ?', [empresa, codigo])
         : [[null]]
       if (!org) {
+        registrarEvento({ usuario_id: null, acao: 'cadastro_recusado', ip_origem: req.ip, detalhe: `motivo=empresa_ou_codigo_invalidos categoria=${categoria}` })
         return res.status(403).json({ mensagem: 'Empresa ou código inválidos.' })
       }
       organizacaoId = org.id
@@ -312,6 +337,7 @@ router.post('/auth/cadastro', limitadorCadastro, async (req, res) => {
 
     if (!resposta.ok) {
       await desfazerEmpresa()
+      registrarEvento({ usuario_id: null, acao: 'cadastro_recusado', ip_origem: req.ip, detalhe: `motivo=auth_service status=${resposta.status} categoria=${categoria}` })
       return res.status(resposta.status).json(dados)
     }
 
@@ -332,9 +358,8 @@ router.post('/auth/cadastro', limitadorCadastro, async (req, res) => {
 
     res.status(resposta.status).json(dados)
   } catch (err) {
-    console.error(err)
     await desfazerEmpresa()
-    res.status(500).json({ mensagem: 'Erro ao cadastrar.' })
+    return erroInterno(req, res, err, 'Erro ao cadastrar.')
   }
 })
 
@@ -348,6 +373,7 @@ router.post('/auth/login', async (req, res) => {
     const dados = await resposta.json()
 
     if (!resposta.ok) {
+      registrarEvento({ usuario_id: null, acao: 'login_falhou', ip_origem: req.ip, detalhe: `status=${resposta.status}` })
       return res.status(resposta.status).json(dados)
     }
 
@@ -360,6 +386,11 @@ router.post('/auth/login', async (req, res) => {
 })
 
 router.post('/auth/logout', (req, res) => {
+  // registra quem saiu, mesmo que o token já tenha expirado (a assinatura ainda é conferida)
+  try {
+    const payload = jwt.verify(req.cookies.token, process.env.JWT_SECRET, { ignoreExpiration: true })
+    registrarEvento({ usuario_id: payload.usuario_id, acao: 'logout', ip_origem: req.ip, detalhe: '' })
+  } catch (err) { /* sem token válido: só limpa o cookie */ }
   res.clearCookie('token')
   res.json({ mensagem: 'Logout realizado.' })
 })
@@ -441,6 +472,7 @@ async function carregarProjeto(req, res) {
   const projeto = linhas[0]
 
   if (!projeto) {
+    await registrarOutraEmpresa(req, 'projetos', id)
     res.status(404).json({ mensagem: 'Projeto não encontrado.' })
     return null
   }
@@ -472,8 +504,7 @@ router.post('/projetos', ...exigirEmpresa, exigirCategoria(['superior'], 'Só o 
 
     res.status(201).json({ id: resultado.insertId })
   } catch (err) {
-    console.error(err)
-    res.status(500).json({ mensagem: 'Erro ao cadastrar projeto.' })
+    return erroInterno(req, res, err, 'Erro ao cadastrar projeto.')
   }
 })
 
@@ -490,8 +521,7 @@ router.get('/projetos', ...exigirEmpresa, async (req, res) => {
     )
     res.json(linhas.map(l => ({ ...l, sou_dono: Boolean(l.sou_dono) })))
   } catch (err) {
-    console.error(err)
-    res.status(500).json({ mensagem: 'Erro ao buscar projetos.' })
+    return erroInterno(req, res, err, 'Erro ao buscar projetos.')
   }
 })
 
@@ -524,8 +554,7 @@ router.get('/projetos/:id', ...exigirEmpresa, async (req, res) => {
 
     res.json({ projeto, sou_dono: souDono, demandas, excluidas })
   } catch (err) {
-    console.error(err)
-    res.status(500).json({ mensagem: 'Erro ao buscar projeto.' })
+    return erroInterno(req, res, err, 'Erro ao buscar projeto.')
   }
 })
 
@@ -552,8 +581,7 @@ router.put('/projetos/:id', ...exigirEmpresa, exigirCategoria(['superior'], 'Só
 
     res.json({ mensagem: 'Projeto atualizado.' })
   } catch (err) {
-    console.error(err)
-    res.status(500).json({ mensagem: 'Erro ao editar projeto.' })
+    return erroInterno(req, res, err, 'Erro ao editar projeto.')
   }
 })
 
@@ -593,8 +621,7 @@ router.delete('/projetos/:id', ...exigirEmpresa, exigirCategoria(['superior'], '
 
     res.json({ mensagem: 'Projeto excluído.' })
   } catch (err) {
-    console.error(err)
-    res.status(500).json({ mensagem: 'Erro ao excluir projeto.' })
+    return erroInterno(req, res, err, 'Erro ao excluir projeto.')
   }
 })
 
@@ -628,8 +655,7 @@ router.patch('/projetos/:id/concluir', ...exigirEmpresa, exigirCategoria(['super
 
     res.json({ mensagem: 'Projeto concluído.' })
   } catch (err) {
-    console.error(err)
-    res.status(500).json({ mensagem: 'Erro ao concluir projeto.' })
+    return erroInterno(req, res, err, 'Erro ao concluir projeto.')
   }
 })
 
@@ -703,8 +729,7 @@ router.post('/projetos/:id/demandas', ...exigirEmpresa, exigirCategoria(['planej
 
     res.status(201).json({ id: resultado.insertId })
   } catch (err) {
-    console.error(err)
-    res.status(500).json({ mensagem: 'Erro ao cadastrar demanda.' })
+    return erroInterno(req, res, err, 'Erro ao cadastrar demanda.')
   }
 })
 
@@ -725,8 +750,7 @@ router.get('/demandas', ...exigirEmpresa, async (req, res) => {
     )
     res.json(linhas)
   } catch (err) {
-    console.error(err)
-    res.status(500).json({ mensagem: 'Erro ao buscar a fila de produção.' })
+    return erroInterno(req, res, err, 'Erro ao buscar a fila de produção.')
   }
 })
 
@@ -746,6 +770,7 @@ async function carregarDemandaGerenciavel(req, res) {
   )
   const demanda = linhas[0]
   if (!demanda) {
+    await registrarOutraEmpresa(req, 'demandas', id)
     res.status(404).json({ mensagem: 'Demanda não encontrada.' })
     return null
   }
@@ -793,8 +818,7 @@ router.put('/demandas/:id', ...exigirEmpresa, limitadorEscrita, async (req, res)
 
     res.json({ mensagem: 'Demanda atualizada.' })
   } catch (err) {
-    console.error(err)
-    res.status(500).json({ mensagem: 'Erro ao editar demanda.' })
+    return erroInterno(req, res, err, 'Erro ao editar demanda.')
   }
 })
 
@@ -813,8 +837,7 @@ router.delete('/demandas/:id', ...exigirEmpresa, limitadorEscrita, async (req, r
 
     res.json({ mensagem: 'Demanda movida para Excluídas.' })
   } catch (err) {
-    console.error(err)
-    res.status(500).json({ mensagem: 'Erro ao excluir demanda.' })
+    return erroInterno(req, res, err, 'Erro ao excluir demanda.')
   }
 })
 
@@ -831,6 +854,7 @@ router.patch('/demandas/:id/avancar', ...exigirEmpresa, limitadorEscrita, async 
     )
     const demanda = linhas[0]
     if (!demanda) {
+      await registrarOutraEmpresa(req, 'demandas', id)
       return res.status(404).json({ mensagem: 'Demanda não encontrada.' })
     }
 
@@ -860,8 +884,7 @@ router.patch('/demandas/:id/avancar', ...exigirEmpresa, limitadorEscrita, async 
 
     res.json({ mensagem: 'Demanda avançou para: ' + regra.proxima })
   } catch (err) {
-    console.error(err)
-    res.status(500).json({ mensagem: 'Erro ao avançar a demanda.' })
+    return erroInterno(req, res, err, 'Erro ao avançar a demanda.')
   }
 })
 
@@ -887,6 +910,8 @@ router.get('/indicadores', ...exigirEmpresa, exigirNivel('expert'), async (req, 
     const contagem = {}
     porEtapa.forEach(l => { contagem[l.etapa] = Number(l.total) })
 
+    logar(req, 'indicadores_consultados')
+
     const por_processo = PROCESSOS_INDICADORES.map(p => ({ ...p, total: contagem[p.processo] || 0 }))
     const concluidas = contagem.finalizada || 0
     const pendentes = por_processo.reduce((soma, p) => soma + p.total, 0)
@@ -908,8 +933,7 @@ router.get('/indicadores', ...exigirEmpresa, exigirNivel('expert'), async (req, 
       por_atividade: porEtapa.map(l => ({ atividade: l.etapa, total: Number(l.total), abertas: Number(l.total) }))
     })
   } catch (err) {
-    console.error(err)
-    res.status(500).json({ mensagem: 'Erro ao calcular indicadores.' })
+    return erroInterno(req, res, err, 'Erro ao calcular indicadores.')
   }
 })
 
@@ -945,6 +969,7 @@ function exigirArquivo(req, res, next) {
 
 router.post(`${ANALISE}/previa`, ...soExpert, limitadorEscrita, uploadCsv.single('arquivo'), exigirArquivo, async (req, res) => {
   const r = await chamarRegressao('POST', '/csv/previa', { arquivo_base64: req.file.buffer.toString('base64') })
+  if (r.status === 200) logar(req, 'csv_previsualizado', `arquivo=${String(req.file.originalname).slice(0, 80)}`)
   res.status(r.status).json(r.dados)
 })
 
@@ -983,6 +1008,7 @@ router.post(`${ANALISE}/prever`, ...soExpert, limitadorEscrita, async (req, res)
 
 router.delete(`${ANALISE}/modelo`, ...soExpert, limitadorEscrita, async (req, res) => {
   const r = await chamarRegressao('DELETE', `/modelo?usuario_id=${req.usuario.usuario_id}`)
+  if (r.status === 200) logar(req, 'modelo_descartado')
   res.status(r.status).json(r.dados)
 })
 
@@ -1001,6 +1027,7 @@ router.post('/assinatura/checkout', exigirLogin, limitadorEscrita, async (req, r
       })
     })
     const dados = await resposta.json()
+    if (resposta.ok) logar(req, 'checkout_iniciado', `plano=${String(req.body.plano).slice(0, 30)}`)
     res.status(resposta.status).json(dados)
   } catch (err) {
     console.error(err)
@@ -1068,6 +1095,7 @@ router.get('/perfil/me', exigirLogin, async (req, res) => {
 router.get('/perfil/:usuario_id', ...exigirEmpresa, async (req, res) => {
   try {
     if (!(await mesmaEmpresa(req, req.params.usuario_id))) {
+      await registrarOutraEmpresa(req, 'usuarios', req.params.usuario_id)
       return res.status(404).json({ mensagem: 'Perfil não encontrado.' })
     }
     const usuarioId = Number(req.params.usuario_id)
@@ -1095,6 +1123,7 @@ router.put('/perfil/:usuario_id', exigirLogin, exigirProprioPerfil, limitadorEsc
       body: JSON.stringify({ bio: req.body.bio })
     })
     const dados = await resposta.json()
+    if (resposta.ok) logar(req, 'perfil_atualizado')
     res.status(resposta.status).json(dados)
   } catch (err) {
     console.error(err)
@@ -1121,6 +1150,7 @@ router.post('/perfil/:usuario_id/foto', exigirLogin, exigirProprioPerfil, limita
       return res.status(resposta.status).json(dados)
     }
 
+    logar(req, 'foto_atualizada', `tamanho_bytes=${req.file.size}`)
     res.json({ ok: true, foto_url: `/api/perfil/${req.usuario.usuario_id}/foto` })
   } catch (err) {
     console.error(err)
@@ -1131,6 +1161,7 @@ router.post('/perfil/:usuario_id/foto', exigirLogin, exigirProprioPerfil, limita
 router.get('/perfil/:usuario_id/foto', ...exigirEmpresa, async (req, res) => {
   try {
     if (!(await mesmaEmpresa(req, req.params.usuario_id))) {
+      await registrarOutraEmpresa(req, 'usuarios', req.params.usuario_id)
       return res.status(404).end()
     }
     const usuarioId = Number(req.params.usuario_id)
