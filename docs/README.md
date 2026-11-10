@@ -62,6 +62,19 @@ O plano **é** o papel do usuário: pagar o Expert muda o papel, e o middleware 
 
 **Funil:** o Professional já organiza o dia a dia e gera o histórico: cada demanda finalizada pela Montagem grava a data de finalização, e a soma das quantidades por mês é a "demanda" usada na previsão. Quando o cliente quer decidir a equipe, o Expert aproveita o histórico que ele já tem. Os limites do Professional contam só projetos e demandas **ativos**: o que é concluído ou excluído sai da contagem.
 
+### Ciclo de vida da assinatura
+
+A assinatura é um **estado**, não um pagamento: o Stripe cobra todo mês e quem sabe o estado verdadeiro é ele. O banco guarda uma cópia (tabela `assinaturas`), mantida em dia pelos **webhooks**. O plano do usuário nunca muda porque o navegador voltou do checkout: ele muda quando o webhook chega, é validado e é processado. O app só abre caminhos (checkout e portal do cliente).
+
+| Evento do Stripe | O que o app faz |
+|---|---|
+| `checkout.session.completed` | Guarda o customer e a subscription e muda o plano para Expert |
+| `customer.subscription.updated` | Atualiza o status (active, past_due, cancelamento agendado...) e recalcula o plano |
+| `customer.subscription.deleted` | A assinatura terminou: a conta volta ao Professional (Free) |
+| `invoice.payment_failed` | Marca a assinatura como inadimplente e suspende o plano pago; quando o pagamento é regularizado, o acesso volta sozinho |
+
+Todo webhook tem a assinatura validada, e o mesmo evento reenviado pelo Stripe não é processado duas vezes (tabela `eventos_stripe`). O botão **Gerenciar assinatura** (página Planos) abre o portal do cliente do Stripe, onde a pessoa troca de plano e cancela sozinha. O **painel admin** mostra usuários por plano, assinaturas ativas, o MRR de teste e os últimos eventos.
+
 ### Como a previsão de equipe funciona
 
 É uma **regressão linear múltipla**, treinada com o histórico do próprio cliente, no estilo de ferramentas como o Orange:
@@ -116,7 +129,7 @@ Os papéis do plano são **cumulativos**: cada um faz o que o anterior faz, mais
 |---|---|---|
 | `professional` | Todo usuário novo (plano gratuito) | O que a sua categoria permite (8.2), dentro dos limites do plano |
 | `expert` | Assinante do plano pago | Tudo do Professional **+** Análise (previsão de equipe e indicadores), sem limites de uso |
-| `admin` | Administrador do produto, usado para testar rotas | Tudo do Expert, mais a consulta de logs. Não é vendável, não aparece na página de planos e só nasce por comando no banco |
+| `admin` | Administrador do produto, usado para testar rotas | Tudo do Expert, mais a consulta de logs e o painel admin (usuários por plano, assinaturas ativas e MRR de teste). Não é vendável, não aparece na página de planos e só nasce por comando no banco |
 
 ### 8.2 Categorias de usuário (papéis do negócio)
 
@@ -154,7 +167,7 @@ Regras:
 - A empresa também fica no log (`org=...`) de cada evento.
 - As permissões por categoria (8.2) valem **dentro** da empresa.
 
-**Verificado** num teste de integração com a API real contra o MariaDB (80 verificações), cobrindo cadastro, papéis, tentativas de abrir, editar, excluir, concluir e avançar IDs de outra empresa, e o log das movimentações. Esse teste ainda não roda no CI (issue 25).
+**Verificado** num teste de integração com a API real contra o MariaDB (80 verificações), cobrindo cadastro, papéis, tentativas de abrir, editar, excluir, concluir e avançar IDs de outra empresa, e o log das movimentações. O pipeline do **CI** também executa um teste de isolamento enxuto a cada push (passo *Testar isolamento entre empresas*): cria duas empresas, confirma que o código de empresa errado é recusado (`403`) e que a empresa B recebe `404` ao abrir, editar, concluir e excluir um projeto da A, ao listar projetos e ao pedir o perfil de um usuário da A. O teste completo de 80 verificações continua rodando fora do CI. Toda tentativa de acessar dados de outra empresa também fica no log (`acesso_negado`, com `motivo=outra_empresa`).
 
 **Decisão em aberto:** o plano (Professional/Expert) continua sendo da **conta**, e os limites do Professional contam por conta. Faz sentido passar o plano para a empresa, com os membros herdando o papel (issue 26).
 
@@ -166,9 +179,9 @@ Regras:
 | Tier list dos stalkers | **Análise** (Expert): previsão de equipe por CSV e indicadores |
 | Serviço e pasta `catalogo` | Renomeado para **`app`**: continua sendo o único serviço público e a porta de entrada dos demais serviços |
 | Login + RBAC | Papéis do plano `professional` < `expert` < `admin` (cumulativos) e, em paralelo, a **categoria** do usuário (papéis do negócio). O `exigirNivel` e o padrão de claims no JWT continuam, e `exigirCategoria` confere a categoria |
-| Logs e auditoria (Redis) | Eventos de negócio, com quem fez, quando e a empresa: `empresa_criada`, `membro_cadastrado`, `codigo_empresa_renovado`, `projeto_criado`, `projeto_editado`, `projeto_excluido`, `projeto_concluido`, `demanda_criada`, `demanda_editada`, `demanda_excluida`, **`demanda_avancada`** (cada passagem de etapa, com `de` e `para`), **`demanda_redirecionada`** (quando o Planejador destina a outro processo), `demanda_concluida`, `modelo_treinado`, `previsao_consultada`, `limite_plano_atingido`, `acesso_negado` e outros. Consulta restrita ao `admin` |
+| Logs e auditoria (Redis) | Eventos de negócio, com quem fez, quando e a empresa: `empresa_criada`, `membro_cadastrado`, `codigo_empresa_renovado`, `projeto_criado`, `projeto_editado`, `projeto_excluido`, `projeto_concluido`, `demanda_criada`, `demanda_editada`, `demanda_excluida`, **`demanda_avancada`** (cada passagem de etapa, com `de` e `para`), **`demanda_redirecionada`** (quando o Planejador destina a outro processo), `demanda_concluida`, `modelo_treinado`, `previsao_consultada`, `limite_plano_atingido`, `acesso_negado`, `logout`, `login_falhou`, `cadastro_recusado`, `assinatura_ativada`, `assinatura_atualizada`, `assinatura_cancelada`, `pagamento_falhou`, `portal_aberto` e outros. Consulta restrita ao `admin` |
 | Upload e perfil (Garage) | Perfil corporativo: foto e bio do usuário |
-| Plano Premium (Stripe) | Plano Expert único: o pagamento muda o papel de `professional` para `expert` |
+| Plano Premium (Stripe) | Plano Expert único, agora como **assinatura recorrente**: o pagamento muda o papel de `professional` para `expert`, e o cancelamento ou a cobrança recusada devolvem a conta ao plano gratuito, sempre pelo webhook. Portal do cliente para trocar de plano e cancelar, e painel admin com o MRR de teste |
 | CI/CD (GitHub Actions) | Continua valendo: build, teste e publicação das imagens a cada push |
 | **Novo:** microsserviço de regressão | Serviço isolado (Python): lê o CSV, treina a regressão com as colunas escolhidas, guarda o modelo por usuário e devolve a previsão |
 
@@ -178,43 +191,158 @@ Regras:
 |---|---|---|
 | `app` | Front, API e porta de entrada dos demais serviços | sim |
 | `auth-service` | Cadastro, login (JWT), recuperação de senha | não |
-| `pagamentos` | Checkout e webhook do Stripe | não (o webhook entra pelo `app`) |
+| `pagamentos` | Checkout, portal do cliente e webhook do Stripe | não (o webhook entra pelo `app`) |
 | `log-service` | Auditoria, em Redis Streams | não |
 | `profile-service` | Foto e bio (Garage, compatível com S3) | não |
 | `regressao` | Treino e previsão (Python) | não |
 | MariaDB | Banco compartilhado (remoto) | externo |
 
-Telas do `app`: **Início** (guia da interface), **Projetos**, **Projeto** (dados no topo, demandas, e para o Planejador a aba *Excluídas*; o Superior ainda tem o botão *Equipe*, com o código da empresa, na lista de projetos), **Minhas demandas** (só Almoxarife, Operador e Montador), **Análise** (abas *Previsão de equipe* e *Indicadores*, só Expert), **Planos** e **Perfil**, além de login, cadastro e recuperação de senha. A landing page pública abre sem login. O CSS é dividido em `tokens`, `base`, `componentes`, `layout`, `auth` e um arquivo por página.
+Telas do `app`: **Início** (guia da interface), **Projetos**, **Projeto** (dados no topo, demandas, e para o Planejador a aba *Excluídas*; o Superior ainda tem o botão *Equipe*, com o código da empresa, na lista de projetos), **Minhas demandas** (só Almoxarife, Operador e Montador), **Análise** (abas *Previsão de equipe* e *Indicadores*, só Expert), **Planos** (com o botão *Gerenciar assinatura*, que abre o portal do cliente do Stripe), **Perfil** e **Painel admin** (só admin), além de login, cadastro e recuperação de senha. A landing page pública abre sem login. O CSS é dividido em `tokens`, `base`, `componentes`, `layout`, `auth` e um arquivo por página.
 
 ## 11. Como rodar (resumo)
 
 1. Copie `env.example` para `.env` e preencha os valores (segredos, banco, SMTP, Stripe, Garage).
-2. No MariaDB, rode os scripts de `db/` em ordem: `001_dominio.sql` cria (ou atualiza, sem apagar nada) empresas, projetos, demandas e o modelo de regressão, e pode ser repetido; `002_seed.sql` é opcional e cria duas empresas de exemplo (Metalúrgica Alfa e Usinagem Beta) com projetos e demandas em todas as etapas, para ver o isolamento funcionando (as instruções estão no começo do arquivo). Num banco que já tinha dados, o `001` coloca todas as contas existentes numa "Empresa de teste (legado)". O `03-admin-e-exemplos.sql` (promove uma conta a `admin` ou `expert` para testes) continua valendo. Os scripts antigos de `banco/` (`02-migracao.sql` e o que apagava `demandas`) não devem mais ser usados.
+2. **Banco de dados** (passo a passo completo em [`db/README.md`](db/README.md)): crie o banco (`CREATE DATABASE atenas CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;`) e rode os scripts de `db/` em ordem:
+   - `000_base.sql` cria as tabelas base (usuários, perfis e pagamentos);
+   - `001_dominio.sql` cria (ou atualiza, sem apagar nada) empresas, projetos, demandas e o modelo de regressão, e pode ser repetido;
+   - `003_assinaturas.sql` cria a cópia local do estado das assinaturas do Stripe e a lista de webhooks já processados;
+   - `002_seed.sql` é opcional e **só para teste**: cria duas empresas de exemplo (Metalúrgica Alfa e Usinagem Beta) com as cinco categorias de usuário, projetos e demandas em todas as etapas, para ver o isolamento funcionando. A senha de todas as contas de exemplo é `Atenas@2026` (a lista de contas está no `db/README.md`). Nunca rode o seed em produção.
+
+   Num banco que já tinha dados, o `001` coloca todas as contas existentes numa "Empresa de teste (legado)", e todas passam a se enxergar: separe-as por empresa antes de subir esta versão da API (o `db/README.md` mostra como). O `03-admin-e-exemplos.sql` (promove uma conta a `admin` ou `expert` para testes) continua valendo. Os scripts antigos de `banco/` (`01-schema.sql`, `02-migracao.sql` e o que apagava `demandas`) não devem mais ser usados.
 3. Para a foto de perfil, suba o Garage e rode o `init-garage.sh` (veja o README do `upload-profile`). Sem isso, o resto funciona.
-4. Para o pagamento, crie no Stripe (modo de teste) um preço mensal de R$ 149, copie o ID `price_...` para `STRIPE_PRICE_EXPERT` e cadastre o webhook com os eventos `checkout.session.completed` e `customer.subscription.deleted`.
+4. Para o pagamento, crie no Stripe (modo de teste) um preço **recorrente mensal** de R$ 149, copie o ID `price_...` para `STRIPE_PRICE_EXPERT` e cadastre o webhook com os eventos `checkout.session.completed`, `customer.subscription.updated`, `customer.subscription.deleted` e `invoice.payment_failed`. Em Settings → Billing → Customer portal, ative a troca de plano e o cancelamento (para testar na hora, escolha o cancelamento **imediato**). A chave secreta e o segredo do webhook ficam só nas variáveis da stack no Portainer, nunca no repositório.
 5. `docker compose up --build` e abra `http://localhost:3000`.
 
-O `docker-compose.portainer.yml` é a versão para a stack do Portainer, e o `docker-compose.ci.yml` junto com `.github/workflows/ci-cd.yml` formam o pipeline.
+O `docker-compose.portainer.yml` é a versão para a stack do Portainer, e o `docker-compose.ci.yml` junto com `.github/workflows/ci-cd.yml` formam o pipeline. O banco do CI (`.github/ci/schema.sql`) é a junção do `db/000_base.sql`, do `db/001_dominio.sql` e do `db/003_assinaturas.sql`: depois de alterar um deles, regenere com `cat db/000_base.sql db/001_dominio.sql db/003_assinaturas.sql > .github/ci/schema.sql`.
 
 ## 12. Status e próximos passos
 
-O isolamento entre empresas, o cadastro com empresa, o log das movimentações e os scripts de banco foram **verificados** num teste de integração (API real contra MariaDB 10.11, com o auth-service simulado). O que ainda **não** foi testado de ponta a ponta é o conjunto no ambiente real (stack no Portainer, auth-service, Stripe, Garage e telas no navegador). As issues deste repositório trazem o que está feito, o que está pendente e o roteiro de teste.
+O isolamento entre empresas, o cadastro com empresa, o log das movimentações e os scripts de banco foram **verificados** num teste de integração (API real contra MariaDB 10.11, com o auth-service simulado), e o isolamento também passa no **CI** a cada push. A assinatura com o Stripe está implementada: checkout recorrente, portal do cliente, os quatro webhooks com proteção contra evento repetido e o painel admin. A lógica dos webhooks foi testada com o Stripe simulado, e falta registrar os testes no Stripe em modo de teste (seção 14, itens 14.9 a 14.14). O roteiro de ponta a ponta no ambiente real (stack no Portainer, auth-service, Stripe, Garage e telas no navegador) está em execução, e as evidências ficam na seção 14. As issues deste repositório trazem o que está feito, o que está pendente e o roteiro de teste.
 
-**Pendências principais:** a decisão de quem é dono do plano (issue 26), colocar os testes de isolamento no CI e executar o roteiro de ponta a ponta no ambiente real (issue 25).
+**Pendências principais:** a decisão de quem é dono do plano (issue 26), concluir o roteiro de ponta a ponta no ambiente real (issue 25) e registrar os testes da assinatura no Stripe.
 
 ## 13. Requisitos de SaaS multi-tenant: situação
 
-Verificação feita sobre o código da API, das telas do `app` e dos scripts de `db/`. Os serviços `auth-service`, `log-service` e `profile-service` e os arquivos de compose **não foram inspecionados**; os itens 1, 3, 4, 8, 9 e 10 foram confirmados pelo responsável pelo projeto.
+Verificação feita sobre o código da API, das telas do `app`, dos scripts de `db/`, do `auth-service` e do `pagamentos`. O `log-service`, o `profile-service` e os arquivos de compose **não foram inspecionados**; os itens 1, 3, 4, 8, 9 e 10 foram confirmados pelo responsável pelo projeto.
 
 | # | Requisito | Situação | Observação |
 |---|---|---|---|
 | 1 | Stack aponta para o repositório novo | Atende (confirmado) | |
-| 2 | Modelagem com 3+ tabelas e script versionado | Atende | `db/001_dominio.sql` (empresas, projetos, demandas, modelo de regressão, com chaves estrangeiras e índices) e `db/002_seed.sql`; testados em banco novo e em banco com dados, repetindo a execução |
+| 2 | Modelagem com 3+ tabelas e script versionado | Atende | `db/000_base.sql`, `db/001_dominio.sql` (empresas, projetos, demandas, modelo de regressão, com chaves estrangeiras e índices), `db/003_assinaturas.sql` e `db/002_seed.sql`; testados em banco novo e em banco com dados, repetindo a execução. O passo a passo para recriar o banco está em [`db/README.md`](db/README.md) |
 | 3 | API com CRUD do recurso principal | Atende (confirmado) | Projetos: listar, criar, detalhar, editar e remover. Demandas: criar, editar, excluir e avançar |
 | 4 | Telas do recurso principal | Atende (confirmado) | |
 | 5 | Papéis do negócio com 403 na API | Atende | Cinco categorias valendo na API. A categoria Superior só nasce com a criação de uma empresa; as demais exigem o código dela |
-| 6 | Isolamento por usuário ou organização | Atende (verificado em teste de integração) | Tudo filtrado pela empresa; ID de outra empresa responde `404`. O formulário de cadastro já pede a empresa e o código. Falta rodar o teste no CI |
-| 7 | Eventos de negócio no log | Atende | Inclui `demanda_avancada` em cada passagem de etapa e `demanda_redirecionada`, todos com quem, quando e a empresa. Login e erro ficam com o `auth-service` (a conferir) |
+| 6 | Isolamento por usuário ou organização | Atende (verificado em teste de integração e no CI) | Tudo filtrado pela empresa; ID de outra empresa responde `404`. O formulário de cadastro já pede a empresa e o código. O teste de isolamento roda no CI a cada push |
+| 7 | Eventos de negócio no log | Atende | Inclui `demanda_avancada` em cada passagem de etapa e `demanda_redirecionada`, todos com quem, quando e a empresa. O `login` fica com o `auth-service`; o `app` registra `logout`, `login_falhou`, `cadastro_recusado`, `acesso_negado` (inclusive tentativa de acesso a outra empresa) e `erro_interno` |
 | 8 | Upload ligado ao domínio | Atende (confirmado) | Perfil corporativo: foto e bio no storage S3 (Garage) |
 | 9 | Landing page pública | Atende (confirmado) | |
 | 10 | Nada de Tom Hanks | Atende (confirmado) | |
+
+## 14. Evidências (prints dos testes)
+
+**Checklist**
+
+*Parte A — SaaS multi-tenant*
+
+- [ ] 14.1 Landing page
+- [ ] 14.2 Listagem do recurso principal
+- [ ] 14.3 O 403 de um papel sem permissão
+- [ ] 14.4 Bloqueio ao abrir o registro de outro usuário
+- [ ] 14.5 Eventos de negócio no log
+- [ ] 14.6 Arquivo no storage S3 (Garage, compatível com MinIO)
+- [ ] 14.7 Stack no Portainer com os containers saudáveis
+- [ ] 14.8 Pipeline do CI aprovado (extra)
+
+*Parte B — Assinatura com o Stripe (modo de teste)*
+
+- [ ] 14.9 Assinatura concluída com o cartão 4242
+- [ ] 14.10 Dashboard do Stripe (modo de teste) com a assinatura
+- [ ] 14.11 Webhook recebido
+- [ ] 14.12 Limite bloqueando no Free
+- [ ] 14.13 Painel admin
+- [ ] 14.14 Portal do cliente e cancelamento (extra)
+- [ ] 14.15 Cobrança recusada (opcional)
+
+### Parte A — SaaS multi-tenant
+
+#### 14.1 Landing page
+
+Página pública, aberta sem login.
+
+![Landing page](../test-pictures/landing-page.png)
+
+**Legenda:** `landing page do SaaS`
+
+#### 14.2 Listagem do recurso principal
+
+**Projeto**, **demandas** e **análises**, vista por um usuário logado. **Análises** é um recurso premium, por isso apenas usuários com o nível de acesso expert podem acessar
+
+![Listagem de projetos](../test-pictures/recurso-principal.png)
+
+![Regressão linear](../test-pictures/recurso-principal-2.png)
+
+**Legenda:** `Nestas imagens, um usuário de nível de acesso "EXPERT" logado`
+
+#### 14.3 O 403 de um papel sem permissão
+
+Um **Planejador** tenta criar um projeto, ação permitida só ao **Superior**. A tela esconde o botão, mas a API recusa mesmo na chamada direta.
+
+Rodado no console do navegador (`F12` → Console), logado como Planejador:
+
+```js
+fetch('/api/projetos', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ nome: 'teste' })
+}).then(r => r.json().then(d => console.log(r.status, d)))
+```
+
+Resultado esperado: `403` com a mensagem "Só o Superior pode cadastrar projetos.".
+
+![403 de um papel sem permissão](../test-pictures/erro-403-planejador.png)
+
+
+#### 14.4 Bloqueio ao abrir o registro de outro usuário
+
+Isolamento entre empresas: um usuário da empresa B tenta abrir um projeto da empresa A.
+
+1. Descubra o ID de um projeto da outra empresa: `SELECT id, nome, organizacao_id FROM projetos;`
+2. Logado como usuário da empresa B, rode no console (troque `ID` pelo número):
+
+```js
+fetch('/api/projetos/ID').then(r => r.json().then(d => console.log(r.status, d)))
+```
+
+Resultado esperado: `404`. A API responde 404 (e não 403) de propósito, para não revelar que o registro existe em outra empresa.
+
+![Bloqueio ao abrir registro de outra empresa](../test-pictures/tentativa-visualizar-recurso-outra-empresa.png)
+
+
+#### 14.5 Eventos de negócio no log
+
+Consulta feita pelo `admin`, que é o único com acesso: `/api/logs?limit=50`.
+Mostra quem fez, quando e a empresa (`org=...`) de cada evento, como `projeto_criado`, `demanda_criada`, `demanda_avancada` e `acesso_negado`.
+
+![Eventos de negócio no log](../test-pictures/logs.png)
+
+
+#### 14.6 Arquivo no storage S3 (Garage, compatível com MinIO)
+
+Foto de perfil enviada pela página **Perfil**, guardada no storage S3 do projeto (Garage, que usa o mesmo protocolo do MinIO).
+
+Listagem do bucket (Portainer → container do Garage → Console):
+
+```bash
+/garage bucket list
+/garage bucket info NOME_DO_BUCKET
+```
+
+![Bucket com o arquivo no storage](../test-pictures/storage-buctek-object.png)
+
+
+#### 14.7 Stack no Portainer com os containers saudáveis
+
+Stack publicada, com todos os serviços (`app`, `auth-service`, `pagamentos`, `log-service`, `profile-service`, `regressao` e o Garage) em execução e saudáveis.
+
+![Stack no Portainer](../test-pictures/containeres-saudavaeis.png)
+
