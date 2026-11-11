@@ -26,9 +26,17 @@ const transportador = nodemailer.createTransport({
   }
 })
 
+// Tentativas de login/recuperação por IP a cada 15 min. Em produção vale 5 (padrão).
+// O CI define RATE_LIMIT_SENSIVEL_MAX com um valor alto, porque todos os testes chegam do mesmo IP.
+// Valor ausente, inválido ou menor que 1 volta para 5: nunca fica sem limite por engano.
+function limiteSensivel() {
+  const valor = Number(process.env.RATE_LIMIT_SENSIVEL_MAX)
+  return Number.isInteger(valor) && valor >= 1 ? valor : 5
+}
+
 const limitadorSensivel = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 5,
+  max: limiteSensivel(),
   message: { mensagem: 'Muitas tentativas. Tente novamente mais tarde.' },
   standardHeaders: true,
   legacyHeaders: false
