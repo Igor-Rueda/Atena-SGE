@@ -1,13 +1,14 @@
 -- Schema usado pelo pipeline de CI (job build-and-test), aplicado no banco de teste.
--- Vai em .github/ci/schema.sql. É composto por duas partes:
---   PARTE 1: tabelas base que o auth-service, o profile-service e o pagamentos criam/usam (pré-requisito).
---   PARTE 2: CÓPIA EXATA de db/001_dominio.sql, sem a linha "USE ..." (o CI já escolhe o banco no comando).
--- Se alterar o db/001_dominio.sql, copie a mudança para a PARTE 2 daqui.
+-- Vai em .github/ci/schema.sql. É a junção de db/000_base.sql, db/001_dominio.sql e db/003_assinaturas.sql.
+-- Se alterar qualquer um deles, regenere com:
+--   cat db/000_base.sql db/001_dominio.sql db/003_assinaturas.sql > .github/ci/schema.sql
 -- Os scripts antigos de banco/ (01-schema.sql, 02-migracao.sql) não valem mais.
 
 -- ============================================================================
--- PARTE 1 — tabelas base
+-- db/000_base.sql
 -- ============================================================================
+
+SET NAMES utf8mb4;
 
 CREATE TABLE IF NOT EXISTS usuarios (
   id INT AUTO_INCREMENT PRIMARY KEY,
@@ -46,8 +47,10 @@ CREATE TABLE IF NOT EXISTS clientes_stripe (
 );
 
 -- ============================================================================
--- PARTE 2 — db/001_dominio.sql (sem o USE)
+-- db/001_dominio.sql
 -- ============================================================================
+
+SET NAMES utf8mb4;
 
 -- ---------- empresas ----------
 CREATE TABLE IF NOT EXISTS organizacoes (
@@ -188,3 +191,30 @@ CREATE INDEX IF NOT EXISTS idx_projetos_organizacao ON projetos (organizacao_id,
 CREATE INDEX IF NOT EXISTS idx_demandas_organizacao ON demandas (organizacao_id, etapa_atual, excluida_em);
 CREATE INDEX IF NOT EXISTS idx_demandas_planejador ON demandas (planejador_id, excluida_em);
 CREATE INDEX IF NOT EXISTS idx_demandas_projeto ON demandas (projeto_id, excluida_em);
+
+-- ============================================================================
+-- db/003_assinaturas.sql
+-- ============================================================================
+
+SET NAMES utf8mb4;
+
+CREATE TABLE IF NOT EXISTS assinaturas (
+  usuario_id INT PRIMARY KEY,
+  stripe_customer_id VARCHAR(64) NOT NULL,
+  stripe_subscription_id VARCHAR(64) NOT NULL,
+  plano VARCHAR(20) NOT NULL,                              -- expert
+  status VARCHAR(30) NOT NULL,                             -- active | trialing | past_due | unpaid | canceled ...
+  valor_mensal_centavos INT NOT NULL DEFAULT 0,            -- base do MRR (planos anuais entram divididos por 12)
+  cancelamento_agendado BOOLEAN NOT NULL DEFAULT FALSE,    -- cancelou, mas ainda vale até o fim do período
+  periodo_fim DATETIME NULL,
+  atualizado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE CASCADE,
+  INDEX idx_assinaturas_status (status)
+);
+
+CREATE TABLE IF NOT EXISTS eventos_stripe (
+  id VARCHAR(80) PRIMARY KEY,                              -- evt_... (id do evento no Stripe)
+  tipo VARCHAR(60) NOT NULL,
+  recebido_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  INDEX idx_eventos_stripe_recebido (recebido_em)
+);

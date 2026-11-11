@@ -48,6 +48,9 @@ services:
       - DB_USER=atenas_test
       - DB_PASSWORD=teste
       - DB_NAME=atenas_test
+      # Só no CI: todos os testes chegam do mesmo IP e fazem vários logins. O limite de produção
+      # (5 por 15 min) continua valendo, porque esta variável não existe fora deste arquivo.
+      - RATE_LIMIT_SENSIVEL_MAX=1000
     depends_on:
       mariadb:
         condition: service_healthy

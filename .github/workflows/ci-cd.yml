@@ -49,6 +49,8 @@ jobs:
           docker compose -f docker-compose.yml -f docker-compose.ci.yml \
             up -d --build --wait --wait-timeout 180
 
+      # O .github/ci/schema.sql é a junção de db/000_base.sql, db/001_dominio.sql e db/003_assinaturas.sql
+      # (as tabelas assinaturas e eventos_stripe são necessárias ao webhook e às rotas de assinatura).
       - name: Aplicar schema no banco de teste
         run: |
           docker compose -f docker-compose.yml -f docker-compose.ci.yml \
@@ -117,15 +119,18 @@ jobs:
 
       # Pagamentos (Stripe): no CI não dá pra cobrar de verdade (as chaves são fake), mas dá pra
       # provar o que mais quebra nessa integração: o webhook passando CRU pelo app até o
-      # serviço pagamentos (assinatura válida -> 200; ausente ou forjada -> 400), a rota de
-      # checkout protegida por login, e a renovação de token -- que exercita a rota interna do
-      # auth-service com a INTERNAL_API_KEY, ou seja, a fiação entre os três serviços.
-      - name: Testar pagamentos (webhook, checkout protegido e renovação de token)
+      # serviço pagamentos (assinatura válida -> 200; ausente ou forjada -> 400), a idempotência
+      # (o mesmo evento reenviado não é processado de novo), a rota de checkout protegida por
+      # login, e a renovação de token -- que exercita a rota interna do auth-service com a
+      # INTERNAL_API_KEY, ou seja, a fiação entre os três serviços.
+      - name: Testar pagamentos (webhook, idempotência, checkout protegido e renovação de token)
         run: |
           falhar() { echo ""; echo "FALHOU: $1 -- pipeline quebrado."; exit 1; }
 
           URL="http://localhost:3000"
-          PAYLOAD='{"id":"evt_ci","object":"event","type":"ping","data":{"object":{}}}'
+          # id único por execução: o evento é gravado em eventos_stripe (idempotência)
+          EVENTO_ID="evt_ci_$(date +%s)_$$"
+          PAYLOAD="{\"id\":\"$EVENTO_ID\",\"object\":\"event\",\"type\":\"ping\",\"data\":{\"object\":{}}}"
 
           echo "1) Webhook SEM assinatura (esperado 400)..."
           STATUS=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$URL/api/stripe/webhook" \
@@ -150,6 +155,24 @@ jobs:
             -H "Content-Type: application/json" -H "stripe-signature: t=$TS,v1=$ASSINATURA" -d "$PAYLOAD")
           echo "   status: $STATUS"
           [ "$STATUS" = "200" ] || { cat /tmp/webhook.txt; falhar "webhook com assinatura válida deveria responder 200"; }
+          if grep -q '"duplicate":true' /tmp/webhook.txt; then
+            falhar "a primeira entrega do evento foi tratada como duplicada"
+          fi
+
+          echo "3b) O evento ficou registrado em eventos_stripe (prova que o schema 003 foi aplicado)..."
+          REGISTRADOS=$(docker compose -f docker-compose.yml -f docker-compose.ci.yml \
+            exec -T mariadb mariadb -u root -pteste atenas_test -N -e \
+            "SELECT COUNT(*) FROM eventos_stripe WHERE id = '$EVENTO_ID'" | tr -d '\r\n ')
+          echo "   registros: $REGISTRADOS"
+          [ "$REGISTRADOS" = "1" ] || falhar "o evento não foi gravado em eventos_stripe"
+
+          echo "3c) O MESMO evento reenviado não pode ser processado de novo (esperado 200 com duplicate)..."
+          STATUS=$(curl -s -o /tmp/webhook2.txt -w "%{http_code}" -X POST "$URL/api/stripe/webhook" \
+            -H "Content-Type: application/json" -H "stripe-signature: t=$TS,v1=$ASSINATURA" -d "$PAYLOAD")
+          echo "   status: $STATUS"
+          cat /tmp/webhook2.txt; echo ""
+          [ "$STATUS" = "200" ] || falhar "o reenvio do evento deveria responder 200"
+          grep -q '"duplicate":true' /tmp/webhook2.txt || falhar "o reenvio do mesmo evento deveria ser marcado como duplicate"
 
           echo "4) Checkout sem login (esperado 401)..."
           STATUS=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$URL/api/assinatura/checkout" \
@@ -183,12 +206,75 @@ jobs:
           grep -q '"role":"professional"' /tmp/renovar.json || falhar "renovação não devolveu o papel esperado"
 
           echo ""
-          echo "Pagamentos OK -- webhook, checkout protegido e renovação de token funcionando."
+          echo "Pagamentos OK -- webhook, idempotência, checkout protegido e renovação de token funcionando."
+
+      # Assinatura (Stripe): rotas que o app repassa ao serviço pagamentos (/status, /portal, /admin/resumo).
+      # Sem Stripe real, testa-se o que depende só do nosso código: proteção por login, proteção por
+      # papel (admin) e as respostas de uma conta nova, que ainda não tem assinatura nem cliente no Stripe.
+      # O fluxo completo (checkout, portal e os webhooks com dados reais) continua no roteiro manual (14.9 a 14.15).
+      - name: Testar assinatura (status, portal e painel admin)
+        run: |
+          falhar() { echo ""; echo "FALHOU: $1 -- pipeline quebrado."; exit 1; }
+
+          URL="http://localhost:3000"
+          SENHA="senha123456"
+          TS=$(date +%s)
+          EMAIL="ci-assinatura-$TS@exemplo.com"
+          EMPRESA="CI Empresa Assinatura $TS"
+
+          echo "1) Rotas de assinatura sem login (esperado 401 em todas)..."
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$URL/api/assinatura")
+          echo "   estado da assinatura: $STATUS"
+          [ "$STATUS" = "401" ] || falhar "GET /api/assinatura sem login deveria responder 401 (status $STATUS)"
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$URL/api/assinatura/portal")
+          echo "   portal: $STATUS"
+          [ "$STATUS" = "401" ] || falhar "POST /api/assinatura/portal sem login deveria responder 401 (status $STATUS)"
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$URL/api/admin/resumo")
+          echo "   painel admin: $STATUS"
+          [ "$STATUS" = "401" ] || falhar "GET /api/admin/resumo sem login deveria responder 401 (status $STATUS)"
+
+          echo "2) Cadastro e login de uma conta nova (plano Professional)..."
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$URL/api/auth/cadastro" \
+            -H "Content-Type: application/json" \
+            -d "{\"nome\":\"CI Assinatura\",\"email\":\"$EMAIL\",\"senha\":\"$SENHA\",\"empresa\":\"$EMPRESA\",\"categoria\":\"superior\"}")
+          [ "$STATUS" = "201" ] || falhar "cadastro do usuário de teste (status $STATUS)"
+          STATUS=$(curl -s -D /tmp/assinatura-headers.txt -o /dev/null -w "%{http_code}" -X POST "$URL/api/auth/login" \
+            -H "Content-Type: application/json" -d "{\"email\":\"$EMAIL\",\"senha\":\"$SENHA\"}")
+          [ "$STATUS" = "200" ] || falhar "login do usuário de teste (status $STATUS)"
+          # o cookie é Secure (só vai por HTTPS), então o token é lido do Set-Cookie e enviado à mão
+          TOKEN=$(sed -nE 's/^[Ss]et-[Cc]ookie: token=([^;]+);.*/\1/p' /tmp/assinatura-headers.txt | head -n 1)
+          [ -n "$TOKEN" ] || falhar "o login não devolveu o cookie de sessão"
+
+          echo "3) Conta nova ainda não tem assinatura (esperado 200 com sem_assinatura)..."
+          STATUS=$(curl -s -o /tmp/assinatura.json -w "%{http_code}" "$URL/api/assinatura" -H "Cookie: token=$TOKEN")
+          cat /tmp/assinatura.json; echo ""
+          [ "$STATUS" = "200" ] || falhar "GET /api/assinatura logado deveria responder 200 (status $STATUS)"
+          grep -q '"status":"sem_assinatura"' /tmp/assinatura.json || falhar "uma conta nova deveria vir sem assinatura"
+
+          echo "4) Portal do cliente sem ter assinado (esperado 404: ainda não existe cliente no Stripe)..."
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$URL/api/assinatura/portal" -H "Cookie: token=$TOKEN")
+          echo "   status: $STATUS"
+          [ "$STATUS" = "404" ] || falhar "o portal para quem nunca assinou deveria responder 404 (status $STATUS)"
+
+          echo "5) Checkout com plano inexistente (esperado 400, antes de chamar o Stripe)..."
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$URL/api/assinatura/checkout" \
+            -H "Content-Type: application/json" -H "Cookie: token=$TOKEN" -d '{"plano":"premium"}')
+          echo "   status: $STATUS"
+          [ "$STATUS" = "400" ] || falhar "checkout com plano inválido deveria responder 400 (status $STATUS)"
+
+          echo "6) Painel admin com conta que não é admin (esperado 403)..."
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$URL/api/admin/resumo" -H "Cookie: token=$TOKEN")
+          echo "   status: $STATUS"
+          [ "$STATUS" = "403" ] || falhar "o painel admin deveria recusar quem não é admin (status $STATUS)"
+
+          echo ""
+          echo "Assinatura OK -- rotas protegidas por login e por papel, e respostas corretas para conta sem assinatura."
 
       # Isolamento entre empresas (multi-tenancy): duas empresas, e a B tenta mexer no que é da A.
       # Tudo que é da outra empresa deve responder 404 (e não 403, para não revelar que existe).
-      # ATENÇÃO: o login do auth-service aceita 5 tentativas por 15 min por IP, e no CI todas vêm do mesmo
-      # IP. Os passos de teste já usam 2 logins e este usa mais 2. Se criar outro passo com login, ajuste o limite.
+      # OBSERVAÇÃO: o login do auth-service limita as tentativas por IP (5 a cada 15 min em produção).
+      # No CI todas as chamadas vêm do mesmo IP, por isso o docker-compose.ci.yml define
+      # RATE_LIMIT_SENSIVEL_MAX no auth-service. Sem essa variável, o limite volta a 5.
       - name: Testar isolamento entre empresas
         run: |
           falhar() { echo ""; echo "FALHOU: $1 -- pipeline quebrado."; exit 1; }
@@ -358,7 +444,7 @@ jobs:
             igorrueda/atenas-profile-service:latest
             igorrueda/atenas-profile-service:sha-${{ steps.vars.outputs.sha_short }}
 
-      # NOVO -- serviço de pagamentos (Stripe). Sem esta imagem no Docker Hub, o Portainer
+      # Serviço de pagamentos (Stripe). Sem esta imagem no Docker Hub, o Portainer
       # falha o deploy da stack ("pull access denied"), igual ao caso do profile-service.
       - name: Build & push -- pagamentos
         uses: docker/build-push-action@v6
