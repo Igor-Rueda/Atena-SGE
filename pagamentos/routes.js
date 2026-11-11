@@ -99,4 +99,110 @@ router.post('/checkout', express.json(), async (req, res) => {
   }
 })
 
+// ---------- PORTAL DO CLIENTE ----------
+// Abre o Billing Portal do Stripe, onde a pessoa troca de plano e cancela sozinha. O portal só
+// existe para quem já tem um cliente no Stripe (ou seja, já passou pelo checkout). Este serviço
+// só ABRE o caminho: quem muda o plano no banco continua sendo o webhook.
+router.post('/portal', express.json(), async (req, res) => {
+  const { usuario_id, ip } = req.body
+  const usuarioId = Number(usuario_id)
+
+  if (!Number.isInteger(usuarioId) || usuarioId <= 0) {
+    return res.status(400).json({ mensagem: 'Dados inválidos.' })
+  }
+
+  try {
+    const [linhas] = await db.query('SELECT stripe_customer_id FROM clientes_stripe WHERE usuario_id = ?', [usuarioId])
+    if (!linhas[0]) {
+      return res.status(404).json({ mensagem: 'Você ainda não tem uma assinatura para gerenciar.' })
+    }
+
+    const sessao = await billing.getStripe().billingPortal.sessions.create({
+      customer: linhas[0].stripe_customer_id,
+      return_url: `${process.env.APP_URL}/planos.html`,
+      locale: 'pt-BR'
+    })
+
+    registrarEvento({
+      usuario_id: usuarioId,
+      acao: 'portal_aberto',
+      ip_origem: ip,
+      detalhe: 'portal=billing'
+    })
+
+    res.json({ url: sessao.url })
+  } catch (err) {
+    console.error(err)
+    res.status(500).json({ mensagem: 'Erro ao abrir o portal de assinatura.' })
+  }
+})
+
+// ---------- ESTADO DA ASSINATURA (para a tela de Planos) ----------
+// Devolve a cópia local do estado da assinatura do usuário (mantida pelos webhooks), para a tela
+// avisar de cobrança recusada ou de cancelamento agendado e mostrar o botão "Gerenciar assinatura".
+router.get('/status', async (req, res) => {
+  const usuarioId = Number(req.query.usuario_id)
+  if (!Number.isInteger(usuarioId) || usuarioId <= 0) {
+    return res.status(400).json({ mensagem: 'Dados inválidos.' })
+  }
+
+  try {
+    const [linhas] = await db.query(
+      'SELECT plano, status, cancelamento_agendado, periodo_fim FROM assinaturas WHERE usuario_id = ?',
+      [usuarioId]
+    )
+    const a = linhas[0]
+    if (!a) return res.json({ status: 'sem_assinatura' })
+
+    res.json({
+      plano: a.plano,
+      status: a.status,
+      inadimplente: ['past_due', 'unpaid'].includes(a.status),
+      cancelamento_agendado: Boolean(a.cancelamento_agendado),
+      periodo_fim: a.periodo_fim
+    })
+  } catch (err) {
+    console.error(err)
+    res.status(500).json({ mensagem: 'Erro ao buscar a assinatura.' })
+  }
+})
+
+// ---------- PAINEL ADMIN: RESUMO DO NEGÓCIO ----------
+// Só o app chama (e só para o papel admin). Usuários por plano vêm de usuarios.role; assinaturas e MRR vêm
+// da cópia local mantida pelos webhooks (tabela assinaturas). MRR de teste = soma do valor mensal das
+// assinaturas ATIVAS (planos anuais entram divididos por 12).
+router.get('/admin/resumo', async (req, res) => {
+  try {
+    const [porPlano] = await db.query('SELECT role, COUNT(*) AS total FROM usuarios GROUP BY role')
+    const usuarios = { professional: 0, expert: 0, admin: 0 }
+    porPlano.forEach(l => { usuarios[l.role] = Number(l.total) })
+
+    const [[resumo]] = await db.query(
+      `SELECT COALESCE(SUM(status = 'active'), 0) AS ativas,
+              COALESCE(SUM(status IN ('past_due', 'unpaid')), 0) AS inadimplentes,
+              COALESCE(SUM(CASE WHEN status = 'active' THEN valor_mensal_centavos ELSE 0 END), 0) AS mrr_centavos
+         FROM assinaturas`
+    )
+
+    // últimos webhooks recebidos (o log de auditoria completo fica em /api/logs)
+    const [webhooks] = await db.query(
+      'SELECT id, tipo, recebido_em FROM eventos_stripe ORDER BY recebido_em DESC, id DESC LIMIT 10'
+    )
+
+    res.json({
+      usuarios,
+      total_usuarios: Object.values(usuarios).reduce((soma, n) => soma + n, 0),
+      assinaturas_ativas: Number(resumo.ativas),
+      assinaturas_inadimplentes: Number(resumo.inadimplentes),
+      mrr: Number(resumo.mrr_centavos) / 100,
+      moeda: 'BRL',
+      modo_teste: true,
+      ultimos_webhooks: webhooks
+    })
+  } catch (err) {
+    console.error(err)
+    res.status(500).json({ mensagem: 'Erro ao calcular o resumo das assinaturas.' })
+  }
+})
+
 module.exports = router
