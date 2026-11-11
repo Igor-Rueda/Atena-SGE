@@ -1,4 +1,5 @@
-/* Planos: Professional (gratuito) e Expert. O pagamento acontece na página do Stripe. */
+/* Planos: Professional (gratuito) e Expert. O pagamento e o gerenciamento (trocar de plano, cancelar)
+   acontecem nas páginas do Stripe: o cartão nunca passa por aqui. */
 const el = Atenas.el;
 
 // mesma ordem da hierarquia do backend (admin fica de fora: não é plano vendável)
@@ -12,9 +13,10 @@ const PLANOS = [
     preco: 'Grátis',
     periodo: '',
     descricao: 'Para organizar o registro e acompanhar as suas demandas.',
-    recursos: ['Cadastrar processos, itens e projetos', 'Ver as suas próprias demandas', 'Perfil com foto e bio'],
-    limites: ['Até 3 projetos ativos', 'Até 50 itens por projeto', 'Até 20 demandas abertas',
-      'Não exclui demandas', 'Sem painel de indicadores', 'Sem análise (previsão de equipe)'],
+    recursos: ['Cadastrar, editar e excluir projetos e demandas (conforme a sua categoria)',
+      'Ver a fila da sua etapa e avançar demandas', 'Perfil com foto e bio'],
+    limites: ['Até 3 projetos ativos', 'Até 50 demandas abertas',
+      'Sem painel de indicadores', 'Sem análise (previsão de equipe)'],
   },
   {
     role: 'expert',
@@ -22,12 +24,16 @@ const PLANOS = [
     preco: 'R$ 149',
     periodo: '/mês',
     descricao: 'Para decidir quantas pessoas alocar e evitar a sobrecarga da equipe.',
-    recursos: ['Tudo do plano Professional, sem limites de uso', 'Painel de indicadores e carga por funcionário',
-      'Análise: previsão de equipe treinada com o seu histórico (CSV)', 'Excluir demandas'],
+    recursos: ['Tudo do plano Professional, sem limites de uso',
+      'Indicadores: demandas por processo e concluídas × pendentes (com impressão)',
+      'Análise: previsão de equipe treinada com o seu histórico (CSV)'],
     limites: [],
     destaque: true,
   },
 ];
+
+// estados em que ainda faz sentido abrir o portal (trocar de plano, atualizar o cartão, cancelar)
+const STATUS_GERENCIAVEIS = ['active', 'trialing', 'past_due', 'unpaid'];
 
 async function assinar(plano, botao) {
   botao.disabled = true;
@@ -39,14 +45,50 @@ async function assinar(plano, botao) {
   botao.disabled = false;
 }
 
+// abre o portal do cliente do Stripe, onde a pessoa troca de plano e cancela sozinha
+async function gerenciarAssinatura(botao) {
+  botao.disabled = true;
+  const r = await Atenas.api('/api/assinatura/portal', { method: 'POST' });
+  if (r.ok && r.dados.url) {
+    window.location.href = r.dados.url;
+    return;
+  }
+  botao.disabled = false;
+}
+
 function lista(itens, classe) {
   const ul = el('ul', undefined, 'plano__lista' + (classe ? ' ' + classe : ''));
   itens.forEach(function (t) { ul.appendChild(el('li', t)); });
   return ul;
 }
 
-Atenas.pronto.then(function (me) {
-  if (new URLSearchParams(window.location.search).get('cancelado')) {
+// Bloco no topo: mostra o estado da assinatura (a cópia que os webhooks mantêm) e o botão do portal
+function mostrarAssinatura(estado) {
+  const secao = document.getElementById('assinatura');
+  if (!estado || !STATUS_GERENCIAVEIS.includes(estado.status)) return;
+
+  secao.replaceChildren();
+  secao.appendChild(el('h2', 'Sua assinatura'));
+
+  if (estado.inadimplente) {
+    secao.appendChild(el('p', 'A última cobrança da sua assinatura foi recusada, e o acesso aos recursos do Expert está suspenso. ' +
+      'Atualize o cartão em "Gerenciar assinatura": quando o pagamento for confirmado, o acesso volta sozinho.', 'plano__descricao'));
+  } else if (estado.cancelamento_agendado) {
+    secao.appendChild(el('p', 'Sua assinatura está cancelada e vale até ' + Atenas.formatarData(estado.periodo_fim) + '. Depois disso a conta volta ao plano gratuito.', 'plano__descricao'));
+  } else {
+    secao.appendChild(el('p', 'Assinatura Expert ativa' + (estado.periodo_fim ? ', com renovação em ' + Atenas.formatarData(estado.periodo_fim) : '') + '.', 'plano__descricao'));
+  }
+
+  const botao = el('button', 'Gerenciar assinatura', 'botao botao--secundario');
+  botao.type = 'button';
+  botao.addEventListener('click', function () { gerenciarAssinatura(botao); });
+  secao.appendChild(botao);
+  secao.hidden = false;
+}
+
+Atenas.pronto.then(async function (me) {
+  const params = new URLSearchParams(window.location.search);
+  if (params.get('cancelado')) {
     Atenas.aviso('Pagamento cancelado. Nenhuma cobrança foi feita.', 'sucesso');
   }
 
@@ -81,4 +123,10 @@ Atenas.pronto.then(function (me) {
     cartao.appendChild(rodape);
     grade.appendChild(cartao);
   });
+
+  // admin não assina; os demais veem o estado da assinatura (se existir) e o botão do portal
+  if (!ehAdmin) {
+    const r = await Atenas.api('/api/assinatura', { silencioso: true });
+    if (r.ok) mostrarAssinatura(r.dados);
+  }
 });

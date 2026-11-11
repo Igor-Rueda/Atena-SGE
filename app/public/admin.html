@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Painel admin — Atenas SGE</title>
+  <link rel="stylesheet" href="css/tokens.css">
+  <link rel="stylesheet" href="css/base.css">
+  <link rel="stylesheet" href="css/componentes.css">
+  <link rel="stylesheet" href="css/layout.css">
+  <link rel="stylesheet" href="css/paginas/admin.css">
+</head>
+<body data-pagina="admin">
+  <main>
+    <header class="pagina-cabecalho">
+      <div>
+        <h1>Painel admin</h1>
+        <p>Usuários por plano, assinaturas e receita recorrente (Stripe em modo de teste).</p>
+      </div>
+      <button id="atualizar" type="button" class="botao botao--secundario">Atualizar</button>
+    </header>
+
+    <section id="resumo" class="admin-metricas" aria-label="Resumo"></section>
+
+    <section class="cartao admin-bloco">
+      <h2>Usuários por plano</h2>
+      <div id="por-plano" class="admin-planos"></div>
+    </section>
+
+    <section class="cartao admin-bloco">
+      <h2>Últimos webhooks recebidos</h2>
+      <div class="admin-tabela-rolavel"><table id="tabela-webhooks" class="admin-tabela"></table></div>
+    </section>
+
+    <section class="cartao admin-bloco">
+      <h2>Últimos eventos do log</h2>
+      <div class="admin-tabela-rolavel"><table id="tabela-log" class="admin-tabela"></table></div>
+    </section>
+  </main>
+
+  <script src="js/layout.js"></script>
+  <script src="js/admin.js"></script>
+</body>
+</html>

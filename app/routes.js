@@ -1035,6 +1035,54 @@ router.post('/assinatura/checkout', exigirLogin, limitadorEscrita, async (req, r
   }
 })
 
+// Estado da assinatura do próprio usuário (cópia mantida pelos webhooks): a tela de Planos usa para
+// avisar de cobrança recusada ou de cancelamento agendado e para mostrar o botão "Gerenciar assinatura".
+router.get('/assinatura', exigirLogin, async (req, res) => {
+  try {
+    const resposta = await fetch(`${PAGAMENTOS_URL}/status?usuario_id=${req.usuario.usuario_id}`, {
+      headers: { 'x-internal-key': INTERNAL_API_KEY }
+    })
+    const dados = await resposta.json()
+    res.status(resposta.status).json(dados)
+  } catch (err) {
+    console.error(err)
+    res.status(502).json({ mensagem: 'Serviço de pagamentos indisponível.' })
+  }
+})
+
+// Portal do cliente (Billing Portal do Stripe): troca de plano e cancelamento. O app só abre o caminho;
+// quem muda o plano no banco é o webhook.
+router.post('/assinatura/portal', exigirLogin, limitadorEscrita, async (req, res) => {
+  try {
+    const resposta = await fetch(`${PAGAMENTOS_URL}/portal`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-internal-key': INTERNAL_API_KEY },
+      body: JSON.stringify({ usuario_id: req.usuario.usuario_id, ip: req.ip })
+    })
+    const dados = await resposta.json()
+    res.status(resposta.status).json(dados)
+  } catch (err) {
+    console.error(err)
+    res.status(502).json({ mensagem: 'Serviço de pagamentos indisponível.' })
+  }
+})
+
+// Painel admin: usuários por plano, assinaturas ativas e MRR de teste (só o papel admin).
+// É um resumo do PRODUTO inteiro, de propósito: o admin é o administrador do produto, não de uma empresa.
+router.get('/admin/resumo', exigirLogin, exigirNivel('admin'), async (req, res) => {
+  try {
+    const resposta = await fetch(`${PAGAMENTOS_URL}/admin/resumo`, {
+      headers: { 'x-internal-key': INTERNAL_API_KEY }
+    })
+    const dados = await resposta.json()
+    if (resposta.ok) logar(req, 'painel_admin_consultado')
+    res.status(resposta.status).json(dados)
+  } catch (err) {
+    console.error(err)
+    res.status(502).json({ mensagem: 'Serviço de pagamentos indisponível.' })
+  }
+})
+
 // ---------- LOGS (só admin do produto) ----------
 
 router.get('/logs', exigirLogin, exigirNivel('admin'), async (req, res) => {

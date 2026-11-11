@@ -1,0 +1,25 @@
+/* Painel admin: só estrutura (grade e tabelas); as cores vêm do tema do restante do app. */
+.admin-metricas {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 1rem;
+  margin-bottom: 1.25rem;
+}
+.admin-metrica { padding: 1rem 1.25rem; }
+.admin-metrica__rotulo { font-size: .85rem; opacity: .75; margin: 0 0 .35rem; }
+.admin-metrica__valor { font-size: 1.9rem; font-weight: 700; margin: 0; line-height: 1.1; }
+.admin-metrica__nota { font-size: .8rem; opacity: .7; margin: .35rem 0 0; }
+
+.admin-bloco { margin-bottom: 1.25rem; padding: 1.25rem; }
+.admin-bloco h2 { margin: 0 0 .85rem; font-size: 1.1rem; }
+
+.admin-planos { display: flex; flex-wrap: wrap; gap: .75rem; }
+.admin-plano { display: flex; align-items: baseline; gap: .6rem; padding: .6rem 1rem; border: 1px solid rgba(128, 128, 128, .3); border-radius: .6rem; }
+.admin-plano strong { font-size: 1.4rem; }
+
+.admin-tabela-rolavel { overflow-x: auto; }
+.admin-tabela { width: 100%; border-collapse: collapse; font-size: .9rem; }
+.admin-tabela th, .admin-tabela td { text-align: left; padding: .5rem .65rem; border-bottom: 1px solid rgba(128, 128, 128, .25); vertical-align: top; }
+.admin-tabela th { font-weight: 600; white-space: nowrap; }
+.admin-tabela td { word-break: break-word; }
+.admin-vazio { opacity: .7; padding: .5rem 0; }
