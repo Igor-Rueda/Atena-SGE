@@ -238,7 +238,26 @@ Verificação feita sobre o código da API, das telas do `app`, dos scripts de `
 | 9 | Landing page pública | Atende (confirmado) | |
 | 10 | Nada de Tom Hanks | Atende (confirmado) | |
 
+### 13.1 Requisitos de assinatura (Stripe): situação
+
+| # | Requisito | Situação | Observação |
+|---|---|---|---|
+| 1 | Planos no Stripe, em modo de teste | Atende | Free (Professional) e Expert, com preço recorrente mensal de R$ 149 criado no Stripe em modo de teste |
+| 2 | Checkout de assinatura | Atende | `mode=subscription`, ligado a um customer do Stripe guardado por usuário (`clientes_stripe`) |
+| 3 | Webhooks mantendo o plano no banco | Atende (testado com o Stripe simulado) | Os quatro eventos, com assinatura validada e sem efeito duplicado (`eventos_stripe`). Falta registrar o teste no Stripe real (14.11) |
+| 4 | Portal do cliente | Feito (a validar no Stripe) | Botão *Gerenciar assinatura* na página Planos; o portal precisa estar configurado no painel do Stripe, com cancelamento imediato para o teste (14.14) |
+| 5 | Limites por plano na API | Atende | Professional: 3 projetos ativos e 50 demandas abertas, barrados no backend com `403` e a mensagem do limite; Expert sem limite (14.12) |
+| 6 | Painel admin | Feito (a validar no ambiente) | Só `admin`: usuários por plano, assinaturas ativas, MRR de teste e últimos eventos (14.13) |
+
 ## 14. Evidências (prints dos testes)
+
+Prints do sistema publicado que comprovam os requisitos acima.
+
+- **Endereço do ambiente:** `https://COLE-AQUI-O-DOMINIO`
+- **Data dos prints:** `DD/MM/AAAA`
+- **Contas usadas:** `COLE-AQUI` (ex.: Superior e Planejador da empresa A, Planejador da empresa B, admin)
+
+**Como colar os prints:** salve cada imagem em `docs/evidencias/img/` com o nome indicado em cada item e ela aparece aqui sozinha. Se preferir, apague a linha da imagem e arraste o arquivo direto para este texto no editor do GitHub. Nenhum print deve mostrar `.env`, tokens, senhas ou chaves.
 
 **Checklist**
 
@@ -262,6 +281,10 @@ Verificação feita sobre o código da API, das telas do `app`, dos scripts de `
 - [ ] 14.13 Painel admin
 - [ ] 14.14 Portal do cliente e cancelamento (extra)
 - [ ] 14.15 Cobrança recusada (opcional)
+
+**Entrega:** abrir uma issue no repositório com o título *Entrega — SaaS completo*, mencionando [@siriani](https://github.com/siriani), com o link do commit e os prints. Nenhuma chave do Stripe vai para o repositório: ficam só nas variáveis da stack no Portainer.
+
+---
 
 ### Parte A — SaaS multi-tenant
 
@@ -345,4 +368,49 @@ Listagem do bucket (Portainer → container do Garage → Console):
 Stack publicada, com todos os serviços (`app`, `auth-service`, `pagamentos`, `log-service`, `profile-service`, `regressao` e o Garage) em execução e saudáveis.
 
 ![Stack no Portainer](../test-pictures/containeres-saudavaeis.png)
+
+### Parte B — Assinatura com o Stripe (modo de teste)
+
+Tudo no **modo de teste** do Stripe (aparece a faixa "Test mode" no painel). Cartão de teste: `4242 4242 4242 4242`, qualquer data futura e qualquer CVC. Nenhum print mostra chaves (`sk_...`, `whsec_...`).
+Use uma **conta nova**, que nasce no plano Professional (Free).
+
+#### 14.9 Assinatura concluída com o cartão 4242
+
+Na página **Planos**, clique em *Assinar Expert*, preencha o checkout hospedado do Stripe com o cartão 4242 e volte ao app. O plano só muda quando o webhook chega: se ainda aparecer Professional, aguarde alguns segundos e recarregue (ou saia e entre de novo).
+
+![Checkout do Stripe com o cartão 4242](../test-pictures/4242-cartao.png)
+
+![Plano Expert ativo no app](../test-pictures/recurso-habilitado.png)
+
+
+#### 14.10 Dashboard do Stripe (modo de teste) com a assinatura
+
+No painel do Stripe, com o modo de teste ligado: **Customers** (ou **Subscriptions**) mostrando a assinatura ativa de R$ 149,00/mês.
+
+![Assinatura no dashboard do Stripe](docs/evidencias/img/10-stripe-dashboard-assinatura.png)
+
+
+#### 14.11 Webhook recebido
+
+Mostra que o evento chegou e foi processado: no painel do Stripe, **Developers → Webhooks →** o endpoint, com as entregas respondendo `200`. Como reforço, o evento `assinatura_ativada` no log (`/api/logs?acao=assinatura_ativada`, como admin) ou a lista de webhooks do painel admin.
+
+![Webhook entregue no painel do Stripe](../test-pictures/checkout-stripe.png)
+
+![Evento assinatura_ativada no log](../test-pictures/logs-stripe.png)
+
+
+#### 14.12 Limite bloqueando no Free
+
+Com uma conta **Professional** (Superior), crie 3 projetos ativos e tente criar o 4º: a API recusa com `403` e a tela abre o convite para assinar o Expert, informando o limite (3).
+
+![Limite do plano Free bloqueando](../test-pictures/limite-excedido-superior.png)
+
+
+#### 14.13 Painel admin
+
+Logado como `admin`, menu **Painel admin**: assinaturas ativas, MRR de teste, usuários por plano, últimos webhooks e eventos do log.
+
+![Painel admin](../test-pictures/painel-app-cancelar-assinatura.png)
+
+![Painel stripe](../test-pictures/cancelar-assinatura-painel-stripe.png)
 
