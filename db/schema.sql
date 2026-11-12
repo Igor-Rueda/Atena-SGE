@@ -1,13 +1,11 @@
+-- Schema usado pelo pipeline de CI (job build-and-test), aplicado no banco de teste.
+-- Vai em .github/ci/schema.sql. É a junção de db/000_base.sql, db/001_dominio.sql e db/003_assinaturas.sql.
+-- Se alterar qualquer um deles, regenere com:
+--   cat db/000_base.sql db/001_dominio.sql db/003_assinaturas.sql > .github/ci/schema.sql
+-- Os scripts antigos de banco/ (01-schema.sql, 02-migracao.sql) não valem mais.
+
 -- ============================================================================
--- Atenas SGE — 000_base.sql: tabelas base (usuários, perfis e pagamentos)
---
--- São as tabelas que os serviços auth-service, profile-service e pagamentos usam.
--- Elas ficam aqui para que quem clonar o repositório consiga criar o banco do ZERO
--- (o 001_dominio.sql depende da tabela `usuarios`).
---
--- Pode ser rodado várias vezes: usa CREATE TABLE IF NOT EXISTS e não apaga nada.
--- Rode com o banco já escolhido na linha de comando (veja db/README.md), por exemplo:
---   mariadb --default-character-set=utf8mb4 -u root -p atenas < db/000_base.sql
+-- db/000_base.sql
 -- ============================================================================
 
 SET NAMES utf8mb4;
@@ -47,19 +45,9 @@ CREATE TABLE IF NOT EXISTS clientes_stripe (
   criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE CASCADE
 );
+
 -- ============================================================================
--- Atenas SGE — 001_dominio.sql: empresas (organizações), projetos, demandas e modelo de regressão
---
--- Serve para criar o banco do zero e também para atualizar um banco já em uso.
--- Pode ser rodado várias vezes sem estragar nada e NÃO apaga dados.
---
--- Pré-requisito: a tabela `usuarios` (criada pelo 000_base.sql ou pelo auth-service).
--- Rode com o banco já escolhido na linha de comando (veja db/README.md), por exemplo:
---   mariadb --default-character-set=utf8mb4 -u root -p atenas < db/001_dominio.sql
--- Depois, se quiser dados de exemplo, rode o 002_seed.sql.
---
--- Isolamento (multi-tenancy): cada usuário pertence a UMA empresa (usuarios.organizacao_id).
--- Projetos e demandas carregam o organizacao_id da empresa, e a API filtra tudo por ele.
+-- db/001_dominio.sql
 -- ============================================================================
 
 SET NAMES utf8mb4;
@@ -146,8 +134,6 @@ CREATE TABLE IF NOT EXISTS modelos_regressao (
 );
 
 -- ---------- dados que já existiam: tudo vai para uma única empresa de teste ----------
--- Só afeta um banco que já tinha usuários antes das empresas existirem. Num banco novo (sem usuários)
--- isto não faz nada. ATENÇÃO: num banco com clientes reais, separe as contas por empresa depois (veja README).
 INSERT INTO organizacoes (nome, codigo_convite)
 SELECT 'Empresa de teste (legado)', UPPER(SUBSTRING(MD5(UUID()), 1, 8))
 FROM DUAL
@@ -206,13 +192,29 @@ CREATE INDEX IF NOT EXISTS idx_demandas_organizacao ON demandas (organizacao_id,
 CREATE INDEX IF NOT EXISTS idx_demandas_planejador ON demandas (planejador_id, excluida_em);
 CREATE INDEX IF NOT EXISTS idx_demandas_projeto ON demandas (projeto_id, excluida_em);
 
--- Para mudar alguém de empresa (por exemplo, juntar a equipe de teste numa empresa só):
---   UPDATE usuarios SET organizacao_id = (SELECT id FROM organizacoes WHERE nome = 'Minha empresa')
---    WHERE email = 'pessoa@exemplo.com';
+-- ============================================================================
+-- db/003_assinaturas.sql
+-- ============================================================================
 
--- ---------- conferência ----------
-SELECT o.id, o.nome,
-       (SELECT COUNT(*) FROM usuarios u WHERE u.organizacao_id = o.id) AS usuarios,
-       (SELECT COUNT(*) FROM projetos p WHERE p.organizacao_id = o.id) AS projetos,
-       (SELECT COUNT(*) FROM demandas d WHERE d.organizacao_id = o.id) AS demandas
-  FROM organizacoes o ORDER BY o.id;
+SET NAMES utf8mb4;
+
+CREATE TABLE IF NOT EXISTS assinaturas (
+  usuario_id INT PRIMARY KEY,
+  stripe_customer_id VARCHAR(64) NOT NULL,
+  stripe_subscription_id VARCHAR(64) NOT NULL,
+  plano VARCHAR(20) NOT NULL,                              -- expert
+  status VARCHAR(30) NOT NULL,                             -- active | trialing | past_due | unpaid | canceled ...
+  valor_mensal_centavos INT NOT NULL DEFAULT 0,            -- base do MRR (planos anuais entram divididos por 12)
+  cancelamento_agendado BOOLEAN NOT NULL DEFAULT FALSE,    -- cancelou, mas ainda vale até o fim do período
+  periodo_fim DATETIME NULL,
+  atualizado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE CASCADE,
+  INDEX idx_assinaturas_status (status)
+);
+
+CREATE TABLE IF NOT EXISTS eventos_stripe (
+  id VARCHAR(80) PRIMARY KEY,                              -- evt_... (id do evento no Stripe)
+  tipo VARCHAR(60) NOT NULL,
+  recebido_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  INDEX idx_eventos_stripe_recebido (recebido_em)
+);
