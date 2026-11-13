@@ -217,7 +217,7 @@ O `docker-compose.portainer.yml` é a versão para a stack do Portainer, e o `do
 
 ## 12. Status e próximos passos
 
-O isolamento entre empresas, o cadastro com empresa, o log das movimentações e os scripts de banco foram **verificados** num teste de integração (API real contra MariaDB 10.11, com o auth-service simulado), e o isolamento também passa no **CI** a cada push. A assinatura com o Stripe está implementada: checkout recorrente, portal do cliente, os quatro webhooks com proteção contra evento repetido e o painel admin. A lógica dos webhooks foi testada com o Stripe simulado, e falta registrar os testes no Stripe em modo de teste (seção 14, itens 14.9 a 14.14). O roteiro de ponta a ponta no ambiente real (stack no Portainer, auth-service, Stripe, Garage e telas no navegador) está em execução, e as evidências ficam na seção 14. As issues deste repositório trazem o que está feito, o que está pendente e o roteiro de teste.
+O isolamento entre empresas, o cadastro com empresa, o log das movimentações e os scripts de banco foram **verificados** num teste de integração (API real contra MariaDB 10.11, com o auth-service simulado), e o isolamento também passa no **CI** a cada push. A assinatura com o Stripe está implementada: checkout recorrente, portal do cliente, os quatro webhooks com proteção contra evento repetido e o painel admin. A lógica dos webhooks foi testada com o Stripe simulado, e falta registrar os testes no Stripe em modo de teste (seção 14, itens 14.8 a 14.12). O roteiro de ponta a ponta no ambiente real (stack no Portainer, auth-service, Stripe, Garage e telas no navegador) está em execução, e as evidências ficam na seção 14. As issues deste repositório trazem o que está feito, o que está pendente e o roteiro de teste.
 
 **Pendências principais:** a decisão de quem é dono do plano (issue 26), concluir o roteiro de ponta a ponta no ambiente real (issue 25) e registrar os testes da assinatura no Stripe.
 
@@ -244,43 +244,40 @@ Verificação feita sobre o código da API, das telas do `app`, dos scripts de `
 |---|---|---|---|
 | 1 | Planos no Stripe, em modo de teste | Atende | Free (Professional) e Expert, com preço recorrente mensal de R$ 149 criado no Stripe em modo de teste |
 | 2 | Checkout de assinatura | Atende | `mode=subscription`, ligado a um customer do Stripe guardado por usuário (`clientes_stripe`) |
-| 3 | Webhooks mantendo o plano no banco | Atende (testado com o Stripe simulado) | Os quatro eventos, com assinatura validada e sem efeito duplicado (`eventos_stripe`). Falta registrar o teste no Stripe real (14.11) |
-| 4 | Portal do cliente | Feito (a validar no Stripe) | Botão *Gerenciar assinatura* na página Planos; o portal precisa estar configurado no painel do Stripe, com cancelamento imediato para o teste (14.14) |
-| 5 | Limites por plano na API | Atende | Professional: 3 projetos ativos e 50 demandas abertas, barrados no backend com `403` e a mensagem do limite; Expert sem limite (14.12) |
-| 6 | Painel admin | Feito (a validar no ambiente) | Só `admin`: usuários por plano, assinaturas ativas, MRR de teste e últimos eventos (14.13) |
+| 3 | Webhooks mantendo o plano no banco | Atende (testado com o Stripe simulado) | Os quatro eventos, com assinatura validada e sem efeito duplicado (`eventos_stripe`). Falta registrar o teste no Stripe real (14.10) |
+| 4 | Portal do cliente | Feito (a validar no Stripe) | Botão *Gerenciar assinatura* na página Planos; o portal precisa estar configurado no painel do Stripe, com cancelamento imediato para o teste |
+| 5 | Limites por plano na API | Atende | Professional: 3 projetos ativos e 50 demandas abertas, barrados no backend com `403` e a mensagem do limite; Expert sem limite (14.11) |
+| 6 | Painel admin | Feito (a validar no ambiente) | Só `admin`: usuários por plano, assinaturas ativas, MRR de teste e últimos eventos (14.12) |
 
 ## 14. Evidências (prints dos testes)
 
-Prints do sistema publicado que comprovam os requisitos acima.
+Prints do sistema publicado que comprovam os requisitos acima. Cada imagem tem um número de figura e um título (também exibido ao passar o mouse sobre ela).
 
 - **Endereço do ambiente:** `https://COLE-AQUI-O-DOMINIO`
 - **Data dos prints:** `DD/MM/AAAA`
 - **Contas usadas:** `COLE-AQUI` (ex.: Superior e Planejador da empresa A, Planejador da empresa B, admin)
 
-**Como colar os prints:** salve cada imagem em `docs/evidencias/img/` com o nome indicado em cada item e ela aparece aqui sozinha. Se preferir, apague a linha da imagem e arraste o arquivo direto para este texto no editor do GitHub. Nenhum print deve mostrar `.env`, tokens, senhas ou chaves.
+**Onde ficam os prints:** na pasta `test-pictures/` do repositório (as imagens são chamadas por `../test-pictures/<arquivo>.png`). Para incluir um novo print, salve o arquivo nessa pasta, acrescente a linha da imagem com um título e uma legenda numerada, e marque o item no checklist. Nenhum print deve mostrar `.env`, tokens, senhas ou chaves.
 
 **Checklist**
 
 *Parte A — SaaS multi-tenant*
 
-- [ ] 14.1 Landing page
-- [ ] 14.2 Listagem do recurso principal
-- [ ] 14.3 O 403 de um papel sem permissão
-- [ ] 14.4 Bloqueio ao abrir o registro de outro usuário
-- [ ] 14.5 Eventos de negócio no log
-- [ ] 14.6 Arquivo no storage S3 (Garage, compatível com MinIO)
-- [ ] 14.7 Stack no Portainer com os containers saudáveis
-- [ ] 14.8 Pipeline do CI aprovado (extra)
+- [x] 14.1 Landing page
+- [x] 14.2 Listagem do recurso principal
+- [x] 14.3 O 403 de um papel sem permissão
+- [x] 14.4 Bloqueio ao abrir o registro de outro usuário
+- [x] 14.5 Eventos de negócio no log
+- [x] 14.6 Arquivo no storage S3 (Garage, compatível com MinIO)
+- [x] 14.7 Stack no Portainer com os containers saudáveis
 
 *Parte B — Assinatura com o Stripe (modo de teste)*
 
-- [ ] 14.9 Assinatura concluída com o cartão 4242
-- [ ] 14.10 Dashboard do Stripe (modo de teste) com a assinatura
-- [ ] 14.11 Webhook recebido
-- [ ] 14.12 Limite bloqueando no Free
-- [ ] 14.13 Painel admin
-- [ ] 14.14 Portal do cliente e cancelamento (extra)
-- [ ] 14.15 Cobrança recusada (opcional)
+- [x] 14.8 Assinatura concluída com o cartão 4242
+- [x] 14.9 Dashboard do Stripe (modo de teste) com a assinatura
+- [x] 14.10 Webhook recebido
+- [x] 14.11 Limite bloqueando no Free
+- [x] 14.12 Painel admin
 
 **Entrega:** abrir uma issue no repositório com o título *Entrega — SaaS completo*, mencionando [@siriani](https://github.com/siriani), com o link do commit e os prints. Nenhuma chave do Stripe vai para o repositório: ficam só nas variáveis da stack no Portainer.
 
@@ -292,19 +289,21 @@ Prints do sistema publicado que comprovam os requisitos acima.
 
 Página pública, aberta sem login.
 
-![Landing page](../test-pictures/landing-page.png)
+![Landing page pública do Atenas SGE](../test-pictures/landing-page.png "Figura 1 — Landing page pública do Atenas SGE")
 
-**Legenda:** `landing page do SaaS`
+*Figura 1 — Landing page pública do Atenas SGE.*
 
 #### 14.2 Listagem do recurso principal
 
-**Projeto**, **demandas** e **análises**, vista por um usuário logado. **Análises** é um recurso premium, por isso apenas usuários com o nível de acesso expert podem acessar
+**Projetos**, **demandas** e **análises**, vistos por um usuário logado. **Análises** é um recurso premium: só usuários com o plano Expert podem acessá-lo. Nestas imagens, o usuário logado é Expert.
 
-![Listagem de projetos](../test-pictures/recurso-principal.png)
+![Listagem de projetos com usuário Expert logado](../test-pictures/recurso-principal.png "Figura 2 — Listagem de projetos com usuário Expert logado")
 
-![Regressão linear](../test-pictures/recurso-principal-2.png)
+*Figura 2 — Listagem de projetos com usuário Expert logado.*
 
-**Legenda:** `Nestas imagens, um usuário de nível de acesso "EXPERT" logado`
+![Análise de previsão de equipe por regressão linear](../test-pictures/recurso-principal-2.png "Figura 3 — Análise de previsão de equipe (regressão linear), exclusiva do plano Expert")
+
+*Figura 3 — Análise de previsão de equipe (regressão linear), exclusiva do plano Expert.*
 
 #### 14.3 O 403 de um papel sem permissão
 
@@ -322,8 +321,9 @@ fetch('/api/projetos', {
 
 Resultado esperado: `403` com a mensagem "Só o Superior pode cadastrar projetos.".
 
-![403 de um papel sem permissão](../test-pictures/erro-403-planejador.png)
+![Resposta 403 ao Planejador que tenta criar um projeto](../test-pictures/erro-403-planejador.png "Figura 4 — Resposta 403 ao Planejador que tenta criar um projeto")
 
+*Figura 4 — Resposta 403 ao Planejador que tenta criar um projeto.*
 
 #### 14.4 Bloqueio ao abrir o registro de outro usuário
 
@@ -338,16 +338,18 @@ fetch('/api/projetos/ID').then(r => r.json().then(d => console.log(r.status, d))
 
 Resultado esperado: `404`. A API responde 404 (e não 403) de propósito, para não revelar que o registro existe em outra empresa.
 
-![Bloqueio ao abrir registro de outra empresa](../test-pictures/tentativa-visualizar-recurso-outra-empresa.png)
+![Bloqueio ao abrir o registro de outra empresa](../test-pictures/tentativa-visualizar-recurso-outra-empresa.png "Figura 5 — Resposta 404 ao tentar abrir um projeto de outra empresa")
 
+*Figura 5 — Resposta 404 ao tentar abrir um projeto de outra empresa.*
 
 #### 14.5 Eventos de negócio no log
 
 Consulta feita pelo `admin`, que é o único com acesso: `/api/logs?limit=50`.
 Mostra quem fez, quando e a empresa (`org=...`) de cada evento, como `projeto_criado`, `demanda_criada`, `demanda_avancada` e `acesso_negado`.
 
-![Eventos de negócio no log](../test-pictures/logs.png)
+![Eventos de negócio no log de auditoria](../test-pictures/logs.png "Figura 6 — Eventos de negócio no log de auditoria, consultado pelo admin")
 
+*Figura 6 — Eventos de negócio no log de auditoria, consultado pelo admin.*
 
 #### 14.6 Arquivo no storage S3 (Garage, compatível com MinIO)
 
@@ -360,57 +362,73 @@ Listagem do bucket (Portainer → container do Garage → Console):
 /garage bucket info NOME_DO_BUCKET
 ```
 
-![Bucket com o arquivo no storage](../test-pictures/storage-buctek-object.png)
+![Bucket do Garage com o arquivo no storage](../test-pictures/storage-buctek-object.png "Figura 7 — Bucket do Garage (S3) com a foto de perfil armazenada")
 
+*Figura 7 — Bucket do Garage (S3) com a foto de perfil armazenada.*
 
 #### 14.7 Stack no Portainer com os containers saudáveis
 
 Stack publicada, com todos os serviços (`app`, `auth-service`, `pagamentos`, `log-service`, `profile-service`, `regressao` e o Garage) em execução e saudáveis.
 
-![Stack no Portainer](../test-pictures/containeres-saudavaeis.png)
+![Stack no Portainer com os containers saudáveis](../test-pictures/containeres-saudavaeis.png "Figura 8 — Stack no Portainer com todos os containers saudáveis")
+
+*Figura 8 — Stack no Portainer com todos os containers saudáveis.*
+
+---
 
 ### Parte B — Assinatura com o Stripe (modo de teste)
 
 Tudo no **modo de teste** do Stripe (aparece a faixa "Test mode" no painel). Cartão de teste: `4242 4242 4242 4242`, qualquer data futura e qualquer CVC. Nenhum print mostra chaves (`sk_...`, `whsec_...`).
 Use uma **conta nova**, que nasce no plano Professional (Free).
 
-#### 14.9 Assinatura concluída com o cartão 4242
+#### 14.8 Assinatura concluída com o cartão 4242
 
 Na página **Planos**, clique em *Assinar Expert*, preencha o checkout hospedado do Stripe com o cartão 4242 e volte ao app. O plano só muda quando o webhook chega: se ainda aparecer Professional, aguarde alguns segundos e recarregue (ou saia e entre de novo).
 
-![Checkout do Stripe com o cartão 4242](../test-pictures/4242-cartao.png)
+![Checkout do Stripe com o cartão 4242](../test-pictures/4242-cartao.png "Figura 9 — Checkout do Stripe pago com o cartão de teste 4242")
 
-![Plano Expert ativo no app](../test-pictures/recurso-habilitado.png)
+*Figura 9 — Checkout do Stripe pago com o cartão de teste 4242.*
 
+![Plano Expert ativo no app](../test-pictures/recurso-habilitado.png "Figura 10 — Plano Expert ativo no app depois do pagamento")
 
-#### 14.10 Dashboard do Stripe (modo de teste) com a assinatura
+*Figura 10 — Plano Expert ativo no app depois do pagamento.*
+
+#### 14.9 Dashboard do Stripe (modo de teste) com a assinatura
 
 No painel do Stripe, com o modo de teste ligado: **Customers** (ou **Subscriptions**) mostrando a assinatura ativa de R$ 149,00/mês.
 
-![Assinatura no dashboard do Stripe](../test-pictures/stripe-modo-teste.png)
+![Assinatura no dashboard do Stripe](../test-pictures/stripe-modo-teste.png "Figura 11 — Assinatura ativa no dashboard do Stripe (modo de teste)")
 
+*Figura 11 — Assinatura ativa no dashboard do Stripe (modo de teste).*
 
-#### 14.11 Webhook recebido
+#### 14.10 Webhook recebido
 
 Mostra que o evento chegou e foi processado: no painel do Stripe, **Developers → Webhooks →** o endpoint, com as entregas respondendo `200`. Como reforço, o evento `assinatura_ativada` no log (`/api/logs?acao=assinatura_ativada`, como admin) ou a lista de webhooks do painel admin.
 
-![Webhook entregue no painel do Stripe](../test-pictures/checkout-stripe.png)
+![Webhook entregue no painel do Stripe](../test-pictures/checkout-stripe.png "Figura 12 — Webhook entregue no painel do Stripe")
 
-![Evento assinatura_ativada no log](../test-pictures/logs-stripe.png)
+*Figura 12 — Webhook entregue no painel do Stripe.*
 
+![Evento assinatura_ativada no log](../test-pictures/logs-stripe.png "Figura 13 — Evento assinatura_ativada no log de auditoria")
 
-#### 14.12 Limite bloqueando no Free
+*Figura 13 — Evento `assinatura_ativada` no log de auditoria.*
+
+#### 14.11 Limite bloqueando no Free
 
 Com uma conta **Professional** (Superior), crie 3 projetos ativos e tente criar o 4º: a API recusa com `403` e a tela abre o convite para assinar o Expert, informando o limite (3).
 
-![Limite do plano Free bloqueando](../test-pictures/limite-excedido-superior.png)
+![Limite do plano Free bloqueando o cadastro](../test-pictures/limite-excedido-superior.png "Figura 14 — Limite de 3 projetos ativos do plano Free bloqueando o cadastro")
 
+*Figura 14 — Limite de 3 projetos ativos do plano Free bloqueando o cadastro.*
 
-#### 14.13 Painel admin
+#### 14.12 Painel admin
 
 Logado como `admin`, menu **Painel admin**: assinaturas ativas, MRR de teste, usuários por plano, últimos webhooks e eventos do log.
 
-![Painel admin](../test-pictures/painel-app-cancelar-assinatura.png)
+![Painel admin do app](../test-pictures/painel-app-cancelar-assinatura.png "Figura 15 — Painel admin do app")
 
-![Painel stripe](../test-pictures/cancelar-assinatura-painel-stripe.png)
+*Figura 15 — Painel admin do app.*
 
+![Cancelamento da assinatura no painel do Stripe](../test-pictures/cancelar-assinatura-painel-stripe.png "Figura 16 — Cancelamento da assinatura no painel do Stripe")
+
+*Figura 16 — Cancelamento da assinatura no painel do Stripe.*
