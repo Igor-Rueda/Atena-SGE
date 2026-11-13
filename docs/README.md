@@ -387,7 +387,7 @@ Na página **Planos**, clique em *Assinar Expert*, preencha o checkout hospedado
 
 No painel do Stripe, com o modo de teste ligado: **Customers** (ou **Subscriptions**) mostrando a assinatura ativa de R$ 149,00/mês.
 
-![Assinatura no dashboard do Stripe](docs/evidencias/img/10-stripe-dashboard-assinatura.png)
+![Assinatura no dashboard do Stripe](../test-pictures/stripe-modo-teste.png.png)
 
 
 #### 14.11 Webhook recebido
