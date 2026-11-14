@@ -2,6 +2,8 @@
 
 > Valores marcados com *(hipótese)* são dados mockados ou estimativas a validar com uma empresa real.
 
+> **Relatório da entrega:** [P2_ISW055_Igor_Rodrigues_Rueda.pdf](P2_ISW055_Igor_Rodrigues_Rueda.pdf)
+
 **Atenas SGE é o software de gestão empresarial em que pequenas indústrias cadastram projetos e as demandas dos processos de Almoxarifado, Operação (fabricação) e Montagem num só lugar, e preveem a equipe necessária com base no próprio histórico.**
 
 ---
